@@ -1,0 +1,44 @@
+{
+  "$schemaVersion": 1,
+  "id": {
+    "key": { "namespace": "CodeReview", "name": "SecurityReview" },
+    "version": { "major": 1, "minor": 0, "patch": 0 }
+  },
+  "messages": [
+    {
+      "role": "System",
+      "sections": [
+        {
+          "name": "Role",
+          "order": 0,
+          "content": { "type": "text", "text": "You are a senior application security engineer." }
+        }
+      ]
+    },
+    {
+      "role": "User",
+      "sections": [
+        {
+          "name": "Task",
+          "order": 0,
+          "content": { "type": "text", "text": "Review the following {{Language}} code for security issues." }
+        },
+        {
+          "name": "Code",
+          "order": 1,
+          "content": { "type": "text", "text": "{{Code}}" }
+        }
+      ]
+    }
+  ],
+  "variables": [
+    { "name": "Language", "required": true },
+    { "name": "Code", "required": true }
+  ],
+  "metadata": {
+    "description": "Security-focused code review prompt.",
+    "owner": "Platform",
+    "tags": [ "code-review", "security" ],
+    "deprecated": false
+  }
+}
