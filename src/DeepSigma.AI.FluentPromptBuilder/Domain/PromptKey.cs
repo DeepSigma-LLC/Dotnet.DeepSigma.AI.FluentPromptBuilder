@@ -4,10 +4,19 @@ namespace DeepSigma.AI.FluentPromptBuilder.Domain;
 
 /// <summary>
 /// Identifies a prompt template independently of version.
-/// Both <see cref="Namespace"/> and <see cref="Name"/> are validated to disallow path-component
-/// characters (<c>/</c>, <c>\</c>, <c>.</c>, <c>:</c>) and whitespace, so keys are safe to use
-/// as path segments in repositories such as <c>FilePromptRepository</c>.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Both <see cref="Namespace"/> and <see cref="Name"/> reject path separators (<c>/</c>,
+/// <c>\</c>) and whitespace at construction. Dots and colons are permitted, so hierarchical
+/// names such as <c>"team.feature"</c> or <c>"my.company:CodeReview"</c> are valid.
+/// </para>
+/// <para>
+/// Repositories that map keys onto file paths (e.g. <c>FilePromptRepository</c>) are
+/// responsible for defending against traversal at the I/O layer — this type guarantees only
+/// that path-component separators cannot be smuggled in.
+/// </para>
+/// </remarks>
 public sealed record PromptKey
 {
     /// <summary>The logical grouping the prompt belongs to (e.g. <c>"CodeReview"</c>).</summary>
@@ -31,8 +40,11 @@ public sealed record PromptKey
     /// <inheritdoc/>
     public override string ToString() => $"{Namespace}/{Name}";
 
+    // Disallow only path separators and whitespace. Dots and colons are permitted to support
+    // hierarchical naming (`team.feature`, `my.company:CodeReview`). Path-traversal defence
+    // is the responsibility of repositories that map keys onto file paths.
     private static readonly SearchValues<char> DisallowedChars =
-        SearchValues.Create("/\\.: \t\n\r");
+        SearchValues.Create("/\\ \t\n\r");
 
     private static void Validate(string value, string paramName)
     {
@@ -44,7 +56,7 @@ public sealed record PromptKey
         if (value.AsSpan().ContainsAny(DisallowedChars))
         {
             throw new ArgumentException(
-                $"Prompt key segment '{value}' contains disallowed characters (/, \\, ., :, whitespace).",
+                $"Prompt key segment '{value}' contains disallowed characters (path separators or whitespace).",
                 paramName);
         }
     }

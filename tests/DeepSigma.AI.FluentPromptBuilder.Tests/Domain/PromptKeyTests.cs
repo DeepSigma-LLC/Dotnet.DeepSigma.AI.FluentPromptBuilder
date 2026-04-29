@@ -33,15 +33,25 @@ public class PromptKeyTests
     [Theory]
     [InlineData("Bad/Namespace")]
     [InlineData("Bad\\Namespace")]
-    [InlineData("Bad.Namespace")]
-    [InlineData("Bad:Namespace")]
     [InlineData("Bad Namespace")]
-    [InlineData("..")]
     [InlineData("../etc")]
+    [InlineData("with\ttab")]
     public void Constructor_DisallowedCharacters_Throws(string input)
     {
         Assert.Throws<ArgumentException>(() => new PromptKey(input, "Name"));
         Assert.Throws<ArgumentException>(() => new PromptKey("Namespace", input));
+    }
+
+    [Theory]
+    [InlineData("team.feature")]
+    [InlineData("my.company:CodeReview")]
+    [InlineData("Common")]
+    [InlineData("v2.SecurityReview")]
+    [InlineData("..")]   // permitted at construction; repositories are responsible for path containment
+    public void Constructor_AllowsDotsColonsAndDoubleDots(string input)
+    {
+        var key = new PromptKey(input, "Name");
+        Assert.Equal(input, key.Namespace);
     }
 
     [Fact]

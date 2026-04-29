@@ -110,11 +110,13 @@ public class FilePromptRepositoryTests : IDisposable
     }
 
     [Fact]
-    public void PromptKey_DisallowsTraversalAtConstruction()
+    public async Task GetTemplateAsync_RejectsPathTraversalAtIO()
     {
-        // Defense in depth: keys can't even be *constructed* with disallowed characters, so
-        // attempts like new PromptKey("..", "Name") cannot reach FilePromptRepository.
-        Assert.Throws<ArgumentException>(() => new PromptKey("..", "evil"));
-        Assert.Throws<ArgumentException>(() => new PromptKey("evil", "../escape"));
+        // PromptKey now permits "." and ".." at construction (so hierarchical names like
+        // "team.feature" work). FilePromptRepository must defend itself: a key whose
+        // canonicalised path resolves outside the configured root throws.
+        var traversal = new PromptKey("..", "evil");
+        await Assert.ThrowsAsync<PromptValidationException>(() =>
+            _repo.GetTemplateAsync(traversal, new PromptVersion(1)));
     }
 }

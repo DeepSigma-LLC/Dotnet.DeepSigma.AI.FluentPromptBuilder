@@ -119,8 +119,6 @@ public class PromptBuilderTests
         Assert.Equal(template.Id, prompt.Source);
         Assert.Equal("You are helpful.", Assert.IsType<TextContent>(prompt.Messages[0].Sections[0].Content).Text);
         Assert.Equal("Hello, world!", Assert.IsType<TextContent>(prompt.Messages[1].Sections[0].Content).Text);
-        Assert.Equal("helpful", prompt.Variables["Persona"]);
-        Assert.Equal("world", prompt.Variables["Name"]);
     }
 
     [Fact]

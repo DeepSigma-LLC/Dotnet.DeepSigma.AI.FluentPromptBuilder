@@ -14,7 +14,6 @@ namespace DeepSigma.AI.FluentPromptBuilder.Building;
 public sealed class PromptBuilder
 {
     private readonly List<PromptMessage> _messages = new();
-    private readonly Dictionary<string, object?> _variables = new(StringComparer.Ordinal);
     private readonly ITemplateRenderer _templateRenderer;
     private VersionedPromptKey? _source;
 
@@ -86,10 +85,6 @@ public sealed class PromptBuilder
         var renderedMessages = _templateRenderer.Render(template, variableMap);
 
         _messages.AddRange(renderedMessages);
-        foreach (var (key, value) in variableMap)
-        {
-            _variables[key] = value;
-        }
         _source = template.Id;
         return this;
     }
@@ -104,7 +99,7 @@ public sealed class PromptBuilder
         {
             throw new PromptValidationException("Prompt must contain at least one message.");
         }
-        return new BuiltPrompt(_source, _messages.ToList(), new Dictionary<string, object?>(_variables, StringComparer.Ordinal));
+        return new BuiltPrompt(_source, _messages.ToList());
     }
 
     private PromptBuilder SimpleMessage(PromptRole role, string sectionName, string content)

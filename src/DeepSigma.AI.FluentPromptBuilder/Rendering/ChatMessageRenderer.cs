@@ -32,10 +32,12 @@ public sealed class ChatMessageRenderer : IPromptRenderer<IReadOnlyList<ChatProm
                 continue;
             }
 
-            var blocks = new List<ChatContentBlock>(renderable.Count * 2);
+            // Section names are metadata, not content — they are deliberately not emitted as
+            // text blocks. Provider adapters that want to surface section labels should expose
+            // them as message-level metadata, not inline content the model has to parse around.
+            var blocks = new List<ChatContentBlock>(renderable.Count);
             foreach (var section in renderable)
             {
-                blocks.Add(new ChatTextBlock("# " + section.Name));
                 blocks.Add(MapContent(section.Content));
             }
             output.Add(new ChatPromptMessage(message.Role.ToApiString(), blocks));

@@ -7,8 +7,6 @@ namespace DeepSigma.AI.FluentPromptBuilder.Domain;
 /// <param name="Source">The versioned template the prompt was built from, or <c>null</c> for
 /// purely manual prompts.</param>
 /// <param name="Messages">The resolved messages, with all template variables substituted.</param>
-/// <param name="Variables">The variable map that was applied.</param>
 public sealed record BuiltPrompt(
     VersionedPromptKey? Source,
-    IReadOnlyList<PromptMessage> Messages,
-    IReadOnlyDictionary<string, object?> Variables);
+    IReadOnlyList<PromptMessage> Messages);

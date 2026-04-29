@@ -112,7 +112,7 @@ public class MarkdownPromptRendererTests
 public class EmptySectionSuppressionTests
 {
     private static BuiltPrompt PromptWith(params PromptMessage[] messages) =>
-        new(Source: null, messages, new Dictionary<string, object?>());
+        new(Source: null, messages);
 
     [Fact]
     public void Markdown_SkipsSectionsWithEmptyText()
@@ -159,10 +159,10 @@ public class EmptySectionSuppressionTests
         var msgs = new ChatMessageRenderer().Render(prompt);
         var msg = Assert.Single(msgs);
 
-        // Two blocks — header + content for the one filled section. Empty section dropped.
-        Assert.Equal(2, msg.Content.Count);
-        Assert.Equal("# Filled", Assert.IsType<ChatTextBlock>(msg.Content[0]).Text);
-        Assert.Equal("hello",    Assert.IsType<ChatTextBlock>(msg.Content[1]).Text);
+        // One block — content for the one filled section. Empty section dropped.
+        // Section names are not emitted as content blocks.
+        var only = Assert.Single(msg.Content);
+        Assert.Equal("hello", Assert.IsType<ChatTextBlock>(only).Text);
     }
 
     [Fact]
@@ -198,15 +198,18 @@ public class EmptySectionSuppressionTests
 
         var chat = new ChatMessageRenderer().Render(prompt);
         Assert.Single(chat);
-        Assert.Equal(4, chat[0].Content.Count); // 2 header blocks + 2 content blocks
+        Assert.Equal(2, chat[0].Content.Count); // 2 content blocks; section names not emitted
     }
 }
 
 public class ChatMessageRendererTests
 {
     [Fact]
-    public void Render_PrependsSectionNameAsTextBlock()
+    public void Render_EmitsOneBlockPerSection_NoHeaderInjection()
     {
+        // Section names are metadata, not content. The chat renderer must not inject
+        // "# Task" text blocks before each section's content — that would leak markdown
+        // into the structured output that provider adapters forward to the model.
         var prompt = PromptBuilder.Create()
             .User(u => u.Section("Task", "Summarize."))
             .Build();
@@ -215,9 +218,8 @@ public class ChatMessageRendererTests
         var msg = Assert.Single(msgs);
 
         Assert.Equal("user", msg.Role);
-        Assert.Equal(2, msg.Content.Count);
-        Assert.Equal("# Task", Assert.IsType<ChatTextBlock>(msg.Content[0]).Text);
-        Assert.Equal("Summarize.", Assert.IsType<ChatTextBlock>(msg.Content[1]).Text);
+        var only = Assert.Single(msg.Content);
+        Assert.Equal("Summarize.", Assert.IsType<ChatTextBlock>(only).Text);
     }
 
     [Fact]
@@ -235,18 +237,20 @@ public class ChatMessageRendererTests
         var msgs = new ChatMessageRenderer().Render(prompt);
         Assert.Equal(3, msgs.Count);
 
-        // user message: text-name, text-content, image-name, image-block
+        // user: 2 sections -> 2 content blocks (text + image), no section-name headers
         Assert.Equal("user", msgs[0].Role);
-        var image = Assert.IsType<ChatImageBlock>(msgs[0].Content[3]);
+        Assert.Equal(2, msgs[0].Content.Count);
+        Assert.Equal("What is this?", Assert.IsType<ChatTextBlock>(msgs[0].Content[0]).Text);
+        var image = Assert.IsType<ChatImageBlock>(msgs[0].Content[1]);
         Assert.Equal("image/jpeg", image.MediaType);
         Assert.Equal(bytes, image.Data.ToArray());
 
-        // assistant
-        var call = Assert.IsType<ChatToolCallBlock>(msgs[1].Content[1]);
+        // assistant: 1 tool-call block
+        var call = Assert.IsType<ChatToolCallBlock>(Assert.Single(msgs[1].Content));
         Assert.Equal("c1", call.ToolCallId);
 
-        // tool
-        var result = Assert.IsType<ChatToolResultBlock>(msgs[2].Content[1]);
+        // tool: 1 tool-result block
+        var result = Assert.IsType<ChatToolResultBlock>(Assert.Single(msgs[2].Content));
         Assert.Equal("c1", result.ToolCallId);
         Assert.Equal("done", Assert.IsType<ChatTextBlock>(result.Output[0]).Text);
     }
