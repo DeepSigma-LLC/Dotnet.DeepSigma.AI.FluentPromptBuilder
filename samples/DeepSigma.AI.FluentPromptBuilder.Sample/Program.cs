@@ -3,6 +3,7 @@ using DeepSigma.AI.FluentPromptBuilder.DependencyInjection;
 using DeepSigma.AI.FluentPromptBuilder.Domain;
 using DeepSigma.AI.FluentPromptBuilder.Rendering;
 using DeepSigma.AI.FluentPromptBuilder.Repositories;
+using DeepSigma.AI.FluentPromptBuilder.Sample;
 using Microsoft.Extensions.DependencyInjection;
 
 // 1. Manual fluent build.
@@ -13,7 +14,7 @@ var manual = PromptBuilder.Create()
         .Section("Error", "NullReferenceException at MyService.Process(line 42)."))
     .Build();
 
-PrintSectionHeader(1);
+Utilities.PrintSectionHeader(1);
 Console.WriteLine("=== Manual prompt — Markdown ===");
 Console.WriteLine(new MarkdownPromptRenderer().Render(manual));
 
@@ -31,7 +32,7 @@ var multimodal = PromptBuilder.Create()
     .Build();
 
 
-PrintSectionHeader(2);
+Utilities.PrintSectionHeader(2);
 Console.WriteLine("=== Multimodal prompt — Chat blocks ===");
 foreach (var msg in new ChatMessageRenderer().Render(multimodal))
 {
@@ -44,15 +45,12 @@ foreach (var msg in new ChatMessageRenderer().Render(multimodal))
 
 static string Describe(ChatContentBlock block) => block switch
 {
-    ChatTextBlock t       => $"text: {Truncate(t.Text, 70)}",
+    ChatTextBlock t       => $"text: {Utilities.Truncate(t.Text, 70)}",
     ChatImageBlock i      => $"image: {i.MediaType}, {i.Data.Length} bytes",
-    ChatToolCallBlock c   => $"tool_call: {c.ToolName} (id={c.ToolCallId}) args={Truncate(c.ArgumentsJson, 60)}",
+    ChatToolCallBlock c   => $"tool_call: {c.ToolName} (id={c.ToolCallId}) args={Utilities.Truncate(c.ArgumentsJson, 60)}",
     ChatToolResultBlock r => $"tool_result: id={r.ToolCallId}, isError={r.IsError}, {r.Output.Count} nested block(s)",
     _                     => block.GetType().Name,
 };
-
-static string Truncate(string s, int max) =>
-    s.Length <= max ? s : s[..max] + "…";
 
 // 3. File-loaded template via DI + factory.
 var promptsDir = Path.Combine(AppContext.BaseDirectory, "prompts");
@@ -70,16 +68,9 @@ var stored = await factory.BuildLatestAsync(
         Code = "var pwd = \"hardcoded-secret\";",
     });
 
-PrintSectionHeader(3);
+Utilities.PrintSectionHeader(3);
 Console.WriteLine("=== Loaded template — Markdown ===");
 Console.WriteLine(services.GetRequiredService<IPromptRenderer<string>>().Render(stored));
 
 
-static void PrintSectionHeader(int exampleNumber)
-{
-    Console.WriteLine();
-    Console.WriteLine("================================");
-    Console.WriteLine($"=== Example {exampleNumber} ===");
-    Console.WriteLine("================================");
-    Console.WriteLine();
-}
+
