@@ -10,6 +10,11 @@ namespace DeepSigma.AI.FluentPromptBuilder.Rendering;
 public sealed class ChatMessageRenderer : IPromptRenderer<IReadOnlyList<ChatPromptMessage>>
 {
     /// <inheritdoc/>
+    /// <remarks>
+    /// Sections whose content is <see cref="TextContent"/> with null/empty/whitespace text are
+    /// skipped. If every section in a message is suppressed this way, the message itself is
+    /// omitted from the output.
+    /// </remarks>
     public IReadOnlyList<ChatPromptMessage> Render(BuiltPrompt prompt)
     {
         ArgumentNullException.ThrowIfNull(prompt);
@@ -17,8 +22,18 @@ public sealed class ChatMessageRenderer : IPromptRenderer<IReadOnlyList<ChatProm
         var output = new List<ChatPromptMessage>(prompt.Messages.Count);
         foreach (var message in prompt.Messages)
         {
-            var blocks = new List<ChatContentBlock>(message.Sections.Count * 2);
-            foreach (var section in message.Sections.OrderBy(s => s.Order))
+            var renderable = message.Sections
+                .OrderBy(s => s.Order)
+                .Where(s => s.HasRenderableContent())
+                .ToList();
+
+            if (renderable.Count == 0)
+            {
+                continue;
+            }
+
+            var blocks = new List<ChatContentBlock>(renderable.Count * 2);
+            foreach (var section in renderable)
             {
                 blocks.Add(new ChatTextBlock("# " + section.Name));
                 blocks.Add(MapContent(section.Content));

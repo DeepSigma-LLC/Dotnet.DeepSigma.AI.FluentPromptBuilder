@@ -31,6 +31,12 @@ public sealed class MarkdownPromptRenderer : IPromptRenderer<string>
     public int LargeImageThreshold { get; }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Sections whose content is <see cref="TextContent"/> with null/empty/whitespace text are
+    /// skipped (typically the result of an unfilled optional template variable). If every
+    /// section in a message is suppressed this way, the message itself is omitted from the
+    /// output rather than emitting a bare role heading with no body.
+    /// </remarks>
     public string Render(BuiltPrompt prompt)
     {
         ArgumentNullException.ThrowIfNull(prompt);
@@ -38,8 +44,18 @@ public sealed class MarkdownPromptRenderer : IPromptRenderer<string>
         var sb = new StringBuilder();
         foreach (var message in prompt.Messages)
         {
+            var renderable = message.Sections
+                .OrderBy(s => s.Order)
+                .Where(s => s.HasRenderableContent())
+                .ToList();
+
+            if (renderable.Count == 0)
+            {
+                continue;
+            }
+
             sb.Append("## ").AppendLine(message.Role.ToString());
-            foreach (var section in message.Sections.OrderBy(s => s.Order))
+            foreach (var section in renderable)
             {
                 sb.AppendLine();
                 sb.Append("### ").AppendLine(section.Name);

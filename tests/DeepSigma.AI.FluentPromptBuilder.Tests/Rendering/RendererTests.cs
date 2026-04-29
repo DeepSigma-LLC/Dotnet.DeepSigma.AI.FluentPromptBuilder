@@ -109,6 +109,99 @@ public class MarkdownPromptRendererTests
     }
 }
 
+public class EmptySectionSuppressionTests
+{
+    private static BuiltPrompt PromptWith(params PromptMessage[] messages) =>
+        new(Source: null, messages, new Dictionary<string, object?>());
+
+    [Fact]
+    public void Markdown_SkipsSectionsWithEmptyText()
+    {
+        var prompt = PromptWith(new PromptMessage(PromptRole.User,
+        [
+            new PromptSection("Filled",   new TextContent("hello"), 0),
+            new PromptSection("Empty",    new TextContent(""), 1),
+            new PromptSection("Spaces",   new TextContent("   \t\n"), 2),
+        ]));
+
+        var md = new MarkdownPromptRenderer().Render(prompt);
+
+        Assert.Contains("### Filled", md, StringComparison.Ordinal);
+        Assert.DoesNotContain("### Empty", md, StringComparison.Ordinal);
+        Assert.DoesNotContain("### Spaces", md, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Markdown_OmitsMessageEntirelyWhenAllSectionsAreEmpty()
+    {
+        var prompt = PromptWith(
+            new PromptMessage(PromptRole.System,
+                [new PromptSection("OptionalNotes", new TextContent(""))]),
+            new PromptMessage(PromptRole.User,
+                [new PromptSection("Task", new TextContent("Do the thing."))]));
+
+        var md = new MarkdownPromptRenderer().Render(prompt);
+
+        Assert.DoesNotContain("## System", md, StringComparison.Ordinal);
+        Assert.Contains("## User", md, StringComparison.Ordinal);
+        Assert.Contains("Do the thing.", md, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Chat_SkipsSectionsWithEmptyText()
+    {
+        var prompt = PromptWith(new PromptMessage(PromptRole.User,
+        [
+            new PromptSection("Filled", new TextContent("hello"), 0),
+            new PromptSection("Empty",  new TextContent(" "), 1),
+        ]));
+
+        var msgs = new ChatMessageRenderer().Render(prompt);
+        var msg = Assert.Single(msgs);
+
+        // Two blocks — header + content for the one filled section. Empty section dropped.
+        Assert.Equal(2, msg.Content.Count);
+        Assert.Equal("# Filled", Assert.IsType<ChatTextBlock>(msg.Content[0]).Text);
+        Assert.Equal("hello",    Assert.IsType<ChatTextBlock>(msg.Content[1]).Text);
+    }
+
+    [Fact]
+    public void Chat_OmitsMessageEntirelyWhenAllSectionsAreEmpty()
+    {
+        var prompt = PromptWith(
+            new PromptMessage(PromptRole.System,
+                [new PromptSection("OptionalNotes", new TextContent("   "))]),
+            new PromptMessage(PromptRole.User,
+                [new PromptSection("Task", new TextContent("hi"))]));
+
+        var msgs = new ChatMessageRenderer().Render(prompt);
+
+        var only = Assert.Single(msgs);
+        Assert.Equal("user", only.Role);
+    }
+
+    [Fact]
+    public void NonTextContent_IsAlwaysRenderable_RegardlessOfFieldEmptiness()
+    {
+        // ImageContent / ToolCallContent / ToolResultContent never get suppressed by the
+        // empty-text rule, even when their string fields are empty — they carry meaningful
+        // structure beyond text and the consumer should decide what to do with them.
+        var prompt = PromptWith(new PromptMessage(PromptRole.User,
+        [
+            new PromptSection("Img",  new ImageContent(Array.Empty<byte>(), "image/png"), 0),
+            new PromptSection("Call", new ToolCallContent("id", "name", ""), 1),
+        ]));
+
+        var md = new MarkdownPromptRenderer().Render(prompt);
+        Assert.Contains("### Img", md, StringComparison.Ordinal);
+        Assert.Contains("### Call", md, StringComparison.Ordinal);
+
+        var chat = new ChatMessageRenderer().Render(prompt);
+        Assert.Single(chat);
+        Assert.Equal(4, chat[0].Content.Count); // 2 header blocks + 2 content blocks
+    }
+}
+
 public class ChatMessageRendererTests
 {
     [Fact]

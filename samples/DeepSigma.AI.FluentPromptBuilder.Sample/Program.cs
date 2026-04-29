@@ -77,6 +77,7 @@ Console.WriteLine(services.GetRequiredService<IPromptRenderer<string>>().Render(
 
 static void PrintSectionHeader(int exampleNumber)
 {
+    Console.WriteLine();
     Console.WriteLine("================================");
     Console.WriteLine($"=== Example {exampleNumber} ===");
     Console.WriteLine("================================");
