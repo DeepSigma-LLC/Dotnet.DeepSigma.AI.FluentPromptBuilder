@@ -147,24 +147,69 @@ var prompt = await factory.BuildLatestAsync(
 ```
 
 Templates are stored as `jsonb` in the same v1 wire format used by the file repository.
-Schema (apply via your migration tool of choice — Flyway, dbup, EF migrations, manual SQL):
+The schema uses a surrogate UUID primary key, a status lookup table with foreign-key
+reference, and audit columns for `created_by` / `deprecated_at`:
 
 ```sql
-CREATE TABLE IF NOT EXISTS prompt_templates (
-    namespace      text        NOT NULL,
-    name           text        NOT NULL,
-    version_major  int         NOT NULL,
-    version_minor  int         NOT NULL,
-    version_patch  int         NOT NULL,
-    content_json   jsonb       NOT NULL,
-    created_at     timestamptz NOT NULL DEFAULT now(),
-    PRIMARY KEY (namespace, name, version_major, version_minor, version_patch)
+CREATE TABLE IF NOT EXISTS prompt_template_statuses (
+    status_id    smallint  PRIMARY KEY,
+    status_name  text      NOT NULL UNIQUE
 );
+
+INSERT INTO prompt_template_statuses (status_id, status_name) VALUES
+    (1, 'Draft'),
+    (2, 'Published'),
+    (3, 'Deprecated'),
+    (4, 'Archived')
+ON CONFLICT (status_id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS prompt_templates (
+    id             uuid         PRIMARY KEY,
+    namespace      text         NOT NULL,
+    name           text         NOT NULL,
+    version_major  int          NOT NULL,
+    version_minor  int          NOT NULL,
+    version_patch  int          NOT NULL,
+    status_id      smallint     NOT NULL REFERENCES prompt_template_statuses(status_id),
+    content_json   jsonb        NOT NULL,
+    created_at     timestamptz  NOT NULL DEFAULT now(),
+    created_by     text         NULL,
+    deprecated_at  timestamptz  NULL,
+    UNIQUE (namespace, name, version_major, version_minor, version_patch)
+);
+
+CREATE INDEX IF NOT EXISTS idx_prompt_templates_key_lookup
+    ON prompt_templates (namespace, name, status_id,
+                         version_major DESC, version_minor DESC, version_patch DESC);
 ```
 
-Or call `PostgresSchema.CreateTableSql()` to obtain the DDL programmatically. For local/dev
+Apply via your migration tool of choice (Flyway, dbup, EF migrations, manual SQL). Or
+call `PostgresSchema.CreateSchemaSql()` to obtain the DDL programmatically. For local/dev
 scenarios there's also `PostgresPromptRepository.EnsureSchemaCreatedAsync(connectionString)`
 which runs the idempotent DDL for you.
+
+#### UUIDv7 expected for `id`
+
+The `id` column has no SQL `DEFAULT`. Callers supply a **UUIDv7** (time-ordered) value when
+inserting — UUIDv7 sorts by creation time, which gives much better insert and index
+performance than v4. In .NET 9+:
+
+```csharp
+var id = Guid.CreateVersion7();
+```
+
+Postgres 17+ also exposes a native `uuidv7()` function if you prefer a SQL-side default.
+
+#### Status filtering
+
+`GetLatestAsync(key)` returns the latest **Published** version. To query by another status:
+
+```csharp
+var draft = await repository.GetLatestAsync(key, PromptStatus.Draft);
+```
+
+`GetTemplateAsync(key, version)` returns the row regardless of status — explicit ask,
+explicit answer.
 
 The repository is **read-only in v1** — populate the table from your own seed script,
 migration, or admin UI. Write methods (`Upsert`, `Delete`) are on the roadmap.

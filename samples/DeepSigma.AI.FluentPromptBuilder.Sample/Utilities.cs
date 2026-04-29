@@ -1,7 +1,7 @@
 
 namespace DeepSigma.AI.FluentPromptBuilder.Sample;
 
-internal class Utilities
+internal static class Utilities
 {
     internal static void PrintSectionHeader(int exampleNumber)
     {

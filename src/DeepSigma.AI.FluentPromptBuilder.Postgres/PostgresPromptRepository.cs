@@ -93,8 +93,23 @@ public sealed class PostgresPromptRepository : IPromptRepository, IDisposable, I
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    /// Returns the latest <see cref="PromptStatus.Published"/> version. Use the
+    /// <see cref="GetLatestAsync(PromptKey, PromptStatus, CancellationToken)"/> overload to
+    /// query for other statuses (Draft / Deprecated / Archived).
+    /// </remarks>
+    public Task<PromptTemplate?> GetLatestAsync(
+        PromptKey key,
+        CancellationToken cancellationToken = default)
+        => GetLatestAsync(key, PromptStatus.Published, cancellationToken);
+
+    /// <summary>
+    /// Returns the highest-versioned template for <paramref name="key"/> whose status equals
+    /// <paramref name="status"/>, or <c>null</c> if no such row exists.
+    /// </summary>
     public async Task<PromptTemplate?> GetLatestAsync(
         PromptKey key,
+        PromptStatus status,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(key);
@@ -104,6 +119,7 @@ public sealed class PostgresPromptRepository : IPromptRepository, IDisposable, I
             FROM   {_tableName}
             WHERE  namespace = @Namespace
               AND  name      = @Name
+              AND  status_id = @StatusId
             ORDER BY version_major DESC, version_minor DESC, version_patch DESC
             LIMIT 1
             """;
@@ -112,7 +128,12 @@ public sealed class PostgresPromptRepository : IPromptRepository, IDisposable, I
         var json = await connection.QuerySingleOrDefaultAsync<string?>(
             new CommandDefinition(
                 sql,
-                new { Namespace = key.Namespace, Name = key.Name },
+                new
+                {
+                    Namespace = key.Namespace,
+                    Name = key.Name,
+                    StatusId = (short)status,
+                },
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
 
         return json is null ? null : DeserializeOrThrow(json, key, version: null);
@@ -144,22 +165,25 @@ public sealed class PostgresPromptRepository : IPromptRepository, IDisposable, I
     }
 
     /// <summary>
-    /// Idempotently creates the schema for this repository's table. Intended for local/dev
-    /// scenarios. Production deployments should use a real migration tool.
+    /// Idempotently creates the lookup table, the main table, the helper index, and seeds the
+    /// four <see cref="PromptStatus"/> rows. Intended for local/dev scenarios; production
+    /// deployments should use a real migration tool.
     /// </summary>
     public static async Task EnsureSchemaCreatedAsync(
         string connectionString,
         string tableName = PostgresSchema.DefaultTableName,
+        string statusTableName = PostgresSchema.DefaultStatusTableName,
         CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
         PostgresSchema.ValidateIdentifier(tableName);
+        PostgresSchema.ValidateIdentifier(statusTableName);
 
         await using var dataSource = NpgsqlDataSource.Create(connectionString);
         await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
         await connection.ExecuteAsync(
             new CommandDefinition(
-                PostgresSchema.CreateTableSql(tableName),
+                PostgresSchema.CreateSchemaSql(tableName, statusTableName),
                 cancellationToken: cancellationToken)).ConfigureAwait(false);
     }
 
