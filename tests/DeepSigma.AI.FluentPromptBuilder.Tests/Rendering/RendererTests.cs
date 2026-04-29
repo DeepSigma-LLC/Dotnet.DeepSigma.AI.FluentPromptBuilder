@@ -60,9 +60,52 @@ public class MarkdownPromptRendererTests
 
         var md = new MarkdownPromptRenderer().Render(prompt);
         Assert.Contains("```json", md, StringComparison.Ordinal);
-        Assert.Contains("\"name\": \"lookup\"", md, StringComparison.Ordinal);
+        Assert.Contains("\"name\":\"lookup\"", md, StringComparison.Ordinal);
+        Assert.Contains("\"tool_call_id\":\"call_1\"", md, StringComparison.Ordinal);
+        // arguments preserved as a nested JSON object (raw, since input parsed)
+        Assert.Contains("\"arguments\":{\"id\":42}", md, StringComparison.Ordinal);
         Assert.Contains("```tool-result", md, StringComparison.Ordinal);
         Assert.Contains("tool_call_id: call_1", md, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void Render_ToolCall_WithValidJsonArgs_EmitsValidJsonWrapper()
+    {
+        var prompt = PromptBuilder.Create()
+            .Assistant(a => a.ToolCallSection("Call", "c1", "lookup", "{\"id\":42}"))
+            .Build();
+
+        var md = new MarkdownPromptRenderer().Render(prompt);
+
+        // Extract the fenced JSON payload and confirm it parses.
+        var start = md.IndexOf("```json", StringComparison.Ordinal);
+        var fenceContentStart = md.IndexOf('\n', start) + 1;
+        var fenceContentEnd = md.IndexOf("```", fenceContentStart, StringComparison.Ordinal);
+        var jsonPayload = md[fenceContentStart..fenceContentEnd].Trim();
+
+        using var doc = System.Text.Json.JsonDocument.Parse(jsonPayload);
+        Assert.Equal("c1", doc.RootElement.GetProperty("tool_call_id").GetString());
+        Assert.Equal("lookup", doc.RootElement.GetProperty("name").GetString());
+        Assert.Equal(42, doc.RootElement.GetProperty("arguments").GetProperty("id").GetInt32());
+    }
+
+    [Fact]
+    public void Render_ToolCall_WithInvalidJsonArgs_FallsBackToQuotedString()
+    {
+        var prompt = PromptBuilder.Create()
+            .Assistant(a => a.ToolCallSection("Call", "c1", "lookup", "not json"))
+            .Build();
+
+        var md = new MarkdownPromptRenderer().Render(prompt);
+
+        var start = md.IndexOf("```json", StringComparison.Ordinal);
+        var fenceContentStart = md.IndexOf('\n', start) + 1;
+        var fenceContentEnd = md.IndexOf("```", fenceContentStart, StringComparison.Ordinal);
+        var jsonPayload = md[fenceContentStart..fenceContentEnd].Trim();
+
+        // The wrapper must still parse; arguments becomes a quoted string.
+        using var doc = System.Text.Json.JsonDocument.Parse(jsonPayload);
+        Assert.Equal("not json", doc.RootElement.GetProperty("arguments").GetString());
     }
 }
 

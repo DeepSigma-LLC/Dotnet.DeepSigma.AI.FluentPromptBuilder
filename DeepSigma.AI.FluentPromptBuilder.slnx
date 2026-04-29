@@ -3,9 +3,11 @@
     <Project Path="samples/DeepSigma.AI.FluentPromptBuilder.Sample/DeepSigma.AI.FluentPromptBuilder.Sample.csproj" />
   </Folder>
   <Folder Name="/src/">
+    <Project Path="src/DeepSigma.AI.FluentPromptBuilder.Postgres/DeepSigma.AI.FluentPromptBuilder.Postgres.csproj" />
     <Project Path="src/DeepSigma.AI.FluentPromptBuilder/DeepSigma.AI.FluentPromptBuilder.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/DeepSigma.AI.FluentPromptBuilder.Postgres.Tests/DeepSigma.AI.FluentPromptBuilder.Postgres.Tests.csproj" />
     <Project Path="tests/DeepSigma.AI.FluentPromptBuilder.Tests/DeepSigma.AI.FluentPromptBuilder.Tests.csproj" />
   </Folder>
 </Solution>

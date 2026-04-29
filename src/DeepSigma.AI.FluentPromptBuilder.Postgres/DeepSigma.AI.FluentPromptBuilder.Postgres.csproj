@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <RootNamespace>DeepSigma.AI.FluentPromptBuilder.Postgres</RootNamespace>
+    <AssemblyName>DeepSigma.AI.FluentPromptBuilder.Postgres</AssemblyName>
+    <PackageId>DeepSigma.AI.FluentPromptBuilder.Postgres</PackageId>
+    <Description>Postgres-backed IPromptRepository for DeepSigma.AI.FluentPromptBuilder, using Dapper and Npgsql.</Description>
+    <PackageTags>ai;prompt;postgres;dapper;npgsql</PackageTags>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\DeepSigma.AI.FluentPromptBuilder\DeepSigma.AI.FluentPromptBuilder.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Dapper" Version="2.1.72" />
+    <PackageReference Include="Npgsql" Version="10.0.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.7" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="DeepSigma.AI.FluentPromptBuilder.Postgres.Tests" />
+  </ItemGroup>
+
+</Project>

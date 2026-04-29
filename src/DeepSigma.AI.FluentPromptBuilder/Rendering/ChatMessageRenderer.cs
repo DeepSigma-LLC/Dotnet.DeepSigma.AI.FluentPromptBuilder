@@ -23,16 +23,7 @@ public sealed class ChatMessageRenderer : IPromptRenderer<IReadOnlyList<ChatProm
                 blocks.Add(new ChatTextBlock("# " + section.Name));
                 blocks.Add(MapContent(section.Content));
             }
-            output.Add(new ChatPromptMessage(
-                message.Role.ToString().ToUpperInvariant() switch
-                {
-                    "SYSTEM" => "system",
-                    "USER" => "user",
-                    "ASSISTANT" => "assistant",
-                    "TOOL" => "tool",
-                    var other => other.ToLowerInvariant(),
-                },
-                blocks));
+            output.Add(new ChatPromptMessage(message.Role.ToApiString(), blocks));
         }
         return output;
     }

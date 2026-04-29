@@ -1,5 +1,7 @@
+using System.Buffers;
 using System.Globalization;
 using System.Text;
+using System.Text.Json;
 using DeepSigma.AI.FluentPromptBuilder.Domain;
 
 namespace DeepSigma.AI.FluentPromptBuilder.Rendering;
@@ -62,9 +64,7 @@ public sealed class MarkdownPromptRenderer : IPromptRenderer<string>
 
             case ToolCallContent c:
                 sb.AppendLine("```json");
-                sb.Append("{ \"tool_call_id\": \"").Append(c.ToolCallId)
-                  .Append("\", \"name\": \"").Append(c.ToolName)
-                  .Append("\", \"arguments\": ").Append(c.ArgumentsJson).AppendLine(" }");
+                sb.AppendLine(FormatToolCallJson(c));
                 sb.AppendLine("```");
                 break;
 
@@ -96,5 +96,47 @@ public sealed class MarkdownPromptRenderer : IPromptRenderer<string>
         var base64 = Convert.ToBase64String(image.Data.Span);
         sb.Append(CultureInfo.InvariantCulture, $"![image](data:{image.MediaType};base64,{base64})");
         sb.AppendLine();
+    }
+
+    // Emits a wrapper object whose `arguments` field is the raw ArgumentsJson when that string
+    // parses as JSON (the documented contract), or a quoted JSON string otherwise. Either way
+    // the result is always valid JSON.
+    private static string FormatToolCallJson(ToolCallContent c)
+    {
+        var buffer = new ArrayBufferWriter<byte>();
+        using (var writer = new Utf8JsonWriter(buffer))
+        {
+            writer.WriteStartObject();
+            writer.WriteString("tool_call_id", c.ToolCallId);
+            writer.WriteString("name", c.ToolName);
+            writer.WritePropertyName("arguments");
+
+            if (TryWriteRawJson(writer, c.ArgumentsJson))
+            {
+                // raw written
+            }
+            else
+            {
+                writer.WriteStringValue(c.ArgumentsJson);
+            }
+
+            writer.WriteEndObject();
+        }
+        return Encoding.UTF8.GetString(buffer.WrittenSpan);
+    }
+
+    private static bool TryWriteRawJson(Utf8JsonWriter writer, string json)
+    {
+        try
+        {
+            using var _ = JsonDocument.Parse(json);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+
+        writer.WriteRawValue(json, skipInputValidation: true);
+        return true;
     }
 }

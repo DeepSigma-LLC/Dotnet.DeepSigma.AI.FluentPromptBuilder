@@ -122,6 +122,61 @@ var prompt = await factory.BuildLatestAsync(
 File layout is `{root}/{namespace}/{name}/{version}.prompt.json`. See
 `samples/DeepSigma.AI.FluentPromptBuilder.Sample/prompts/...` for an example.
 
+### 5. Postgres-backed templates
+
+Install the optional companion package:
+
+```xml
+<PackageReference Include="DeepSigma.AI.FluentPromptBuilder.Postgres" Version="0.1.0" />
+```
+
+Wire it up the same way as the file repository:
+
+```csharp
+using DeepSigma.AI.FluentPromptBuilder.Postgres;
+
+var services = new ServiceCollection()
+    .AddFluentPromptBuilder()
+    .AddPostgresPromptRepository("Host=localhost;Database=prompts;Username=app;Password=...")
+    .BuildServiceProvider();
+
+var factory = services.GetRequiredService<IPromptFactory>();
+var prompt = await factory.BuildLatestAsync(
+    new PromptKey("CodeReview", "SecurityReview"),
+    new { Language = "C#", Code = sourceCode });
+```
+
+Templates are stored as `jsonb` in the same v1 wire format used by the file repository.
+Schema (apply via your migration tool of choice — Flyway, dbup, EF migrations, manual SQL):
+
+```sql
+CREATE TABLE IF NOT EXISTS prompt_templates (
+    namespace      text        NOT NULL,
+    name           text        NOT NULL,
+    version_major  int         NOT NULL,
+    version_minor  int         NOT NULL,
+    version_patch  int         NOT NULL,
+    content_json   jsonb       NOT NULL,
+    created_at     timestamptz NOT NULL DEFAULT now(),
+    PRIMARY KEY (namespace, name, version_major, version_minor, version_patch)
+);
+```
+
+Or call `PostgresSchema.CreateTableSql()` to obtain the DDL programmatically. For local/dev
+scenarios there's also `PostgresPromptRepository.EnsureSchemaCreatedAsync(connectionString)`
+which runs the idempotent DDL for you.
+
+The repository is **read-only in v1** — populate the table from your own seed script,
+migration, or admin UI. Write methods (`Upsert`, `Delete`) are on the roadmap.
+
+If you already manage your own `NpgsqlDataSource` (recommended for production), pass it
+directly:
+
+```csharp
+using var dataSource = NpgsqlDataSource.Create(connectionString);
+services.AddPostgresPromptRepository(dataSource);
+```
+
 ---
 
 ## File schema (v1)
@@ -221,11 +276,13 @@ Prompt audit / traceability via deterministic content hashes. Sketch:
 - Pinned by golden-file tests so any change to the canonical form is an intentional breaking
   change.
 
-### Database-backed repositories (planned)
+### Database-backed repositories
 
-`IPromptRepository` is the explicit extension point. A future
-`DeepSigma.AI.FluentPromptBuilder.Sql` package will provide an EF Core / Dapper
-implementation in a separate assembly that depends only on the public API of this library.
+Postgres is shipped as a companion package — see [Section 5](#5-postgres-backed-templates).
+Other backends (SQL Server, MySQL, Redis, DynamoDB) can be added in separate packages by
+implementing `IPromptRepository`; nothing in the core library needs to change.
+
+Postgres write API (`Upsert`, `Delete`) — planned, not in v1.
 
 ### Provider adapters (planned)
 
