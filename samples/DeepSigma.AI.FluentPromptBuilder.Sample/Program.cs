@@ -15,8 +15,16 @@ var manual = PromptBuilder.Create()
     .Build();
 
 Utilities.PrintSectionHeader(1);
-Console.WriteLine("=== Manual prompt — Markdown ===");
+Utilities.Print("=== Manual prompt — Markdown ===", ConsoleColor.Blue);
 Console.WriteLine(new MarkdownPromptRenderer().Render(manual));
+
+Console.WriteLine();
+Utilities.Print("=== Manual prompt — JSON ===", ConsoleColor.Blue);
+Console.WriteLine(new JsonChatPromptRenderer().Render(manual));
+
+Console.WriteLine();
+Utilities.Print("=== Manual prompt — Text ===", ConsoleColor.Blue);
+Console.WriteLine(new PlainTextPromptRenderer(PlainTextStyle.ContentOnly).Render(manual));
 
 // 2. Multimodal example: image + tool_call + tool_result.
 var multimodal = PromptBuilder.Create()
@@ -33,24 +41,24 @@ var multimodal = PromptBuilder.Create()
 
 
 Utilities.PrintSectionHeader(2);
-Console.WriteLine("=== Multimodal prompt — Chat blocks ===");
+Utilities.Print("=== Multimodal prompt — Chat blocks ===", ConsoleColor.Blue);
 foreach (var msg in new ChatMessageRenderer().Render(multimodal))
 {
     Console.WriteLine($"[{msg.Role}] ({msg.Content.Count} block{(msg.Content.Count == 1 ? "" : "s")})");
     foreach (var block in msg.Content)
     {
-        Console.WriteLine("  " + Describe(block));
+        Console.WriteLine("  " + Utilities.Describe(block));
     }
 }
 
-static string Describe(PromptContent block) => block switch
-{
-    TextContent t       => $"text: {Utilities.Truncate(t.Text, 70)}",
-    ImageContent i      => $"image: {i.MediaType}, {i.Data.Length} bytes",
-    ToolCallContent c   => $"tool_call: {c.ToolName} (id={c.ToolCallId}) args={Utilities.Truncate(c.ArgumentsJson, 60)}",
-    ToolResultContent r => $"tool_result: id={r.ToolCallId}, isError={r.IsError}, {r.Output.Count} nested block(s)",
-    _                   => block.GetType().Name,
-};
+Console.WriteLine();
+Utilities.Print("=== Multimodal prompt — JSON ===", ConsoleColor.Blue);
+Console.WriteLine(new JsonChatPromptRenderer().Render(multimodal));
+
+Console.WriteLine();
+Utilities.Print("=== Multimodal prompt — Text ===", ConsoleColor.Blue);
+Console.WriteLine(new PlainTextPromptRenderer(PlainTextStyle.Labeled).Render(multimodal));
+
 
 // 3. File-loaded template via DI + factory.
 var promptsDir = Path.Combine(AppContext.BaseDirectory, "prompts");
@@ -69,8 +77,14 @@ var stored = await factory.BuildLatestAsync(
     });
 
 Utilities.PrintSectionHeader(3);
-Console.WriteLine("=== Loaded template — Markdown ===");
+Utilities.Print("=== Loaded template — Markdown ===", ConsoleColor.Blue);
 Console.WriteLine(services.GetRequiredService<IPromptRenderer<string>>().Render(stored));
+Console.WriteLine();
+Utilities.Print("=== Loaded template — JSON ===", ConsoleColor.Blue);
+Console.WriteLine(new JsonChatPromptRenderer().Render(stored));
 
+Console.WriteLine();
+Utilities.Print("=== Loaded template — Text ===", ConsoleColor.Blue);
+Console.WriteLine(new PlainTextPromptRenderer(PlainTextStyle.Transcript).Render(manual));
 
 
