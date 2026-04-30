@@ -85,7 +85,7 @@ string chatJson = new JsonChatPromptRenderer().Render(prompt);
 
 // Round-trip-friendly JSON in the same v1 schema as stored templates — preserves
 // section names, ordering, and Source. Useful for caching, audit logs, transport.
-string roundTripJson = new JsonBuiltPromptRenderer().Render(prompt);
+string roundTripJson = BuiltPromptJsonSerializer.Serialize(prompt);
 var rebuilt = BuiltPromptJsonSerializer.Deserialize(roundTripJson);
 ```
 

@@ -28,11 +28,10 @@ public static class ServiceCollectionExtensions
         // their concrete types so consumers can resolve them explicitly without a key, e.g.
         // sp.GetRequiredService<JsonChatPromptRenderer>().
         services.AddSingleton<IPromptRenderer<string>, MarkdownPromptRenderer>();
-        services.AddSingleton<IPromptRenderer<IReadOnlyList<ChatPromptMessage>>, ChatMessageRenderer>();
+        services.AddSingleton<IPromptRenderer<IReadOnlyList<ChatMessage>>, ChatMessageRenderer>();
         services.AddSingleton<MarkdownPromptRenderer>();
         services.AddSingleton<ChatMessageRenderer>();
         services.AddSingleton<JsonChatPromptRenderer>();
-        services.AddSingleton<JsonBuiltPromptRenderer>();
         services.AddSingleton<PlainTextPromptRenderer>();
 
         return services;

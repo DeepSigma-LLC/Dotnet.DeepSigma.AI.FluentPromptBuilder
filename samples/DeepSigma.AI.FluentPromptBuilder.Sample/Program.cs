@@ -43,13 +43,13 @@ foreach (var msg in new ChatMessageRenderer().Render(multimodal))
     }
 }
 
-static string Describe(ChatContentBlock block) => block switch
+static string Describe(PromptContent block) => block switch
 {
-    ChatTextBlock t       => $"text: {Utilities.Truncate(t.Text, 70)}",
-    ChatImageBlock i      => $"image: {i.MediaType}, {i.Data.Length} bytes",
-    ChatToolCallBlock c   => $"tool_call: {c.ToolName} (id={c.ToolCallId}) args={Utilities.Truncate(c.ArgumentsJson, 60)}",
-    ChatToolResultBlock r => $"tool_result: id={r.ToolCallId}, isError={r.IsError}, {r.Output.Count} nested block(s)",
-    _                     => block.GetType().Name,
+    TextContent t       => $"text: {Utilities.Truncate(t.Text, 70)}",
+    ImageContent i      => $"image: {i.MediaType}, {i.Data.Length} bytes",
+    ToolCallContent c   => $"tool_call: {c.ToolName} (id={c.ToolCallId}) args={Utilities.Truncate(c.ArgumentsJson, 60)}",
+    ToolResultContent r => $"tool_result: id={r.ToolCallId}, isError={r.IsError}, {r.Output.Count} nested block(s)",
+    _                   => block.GetType().Name,
 };
 
 // 3. File-loaded template via DI + factory.

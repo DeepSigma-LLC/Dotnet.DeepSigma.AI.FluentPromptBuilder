@@ -3,59 +3,34 @@ using DeepSigma.AI.FluentPromptBuilder.Domain;
 namespace DeepSigma.AI.FluentPromptBuilder.Rendering;
 
 /// <summary>
-/// Renders a <see cref="BuiltPrompt"/> into a list of <see cref="ChatPromptMessage"/>s whose
-/// content is itself structured into typed <see cref="ChatContentBlock"/>s. Provider adapters
-/// consume this shape directly without re-parsing strings.
+/// Renders a <see cref="BuiltPrompt"/> into a flat list of <see cref="ChatMessage"/>s. The
+/// content payload reuses the domain <see cref="PromptContent"/> hierarchy directly so
+/// provider adapters can switch on the content variants without an intermediate type hop.
 /// </summary>
-public sealed class ChatMessageRenderer : IPromptRenderer<IReadOnlyList<ChatPromptMessage>>
+/// <remarks>
+/// Section names are not emitted (they are metadata, not content). Sections whose text is
+/// empty/whitespace are skipped via <see cref="PromptSectionExtensions.RenderableSections"/>.
+/// If every section in a message is suppressed, the message itself is omitted.
+/// </remarks>
+public sealed class ChatMessageRenderer : IPromptRenderer<IReadOnlyList<ChatMessage>>
 {
     /// <inheritdoc/>
-    /// <remarks>
-    /// Sections whose content is <see cref="TextContent"/> with null/empty/whitespace text are
-    /// skipped. If every section in a message is suppressed this way, the message itself is
-    /// omitted from the output.
-    /// </remarks>
-    public IReadOnlyList<ChatPromptMessage> Render(BuiltPrompt prompt)
+    public IReadOnlyList<ChatMessage> Render(BuiltPrompt prompt)
     {
         ArgumentNullException.ThrowIfNull(prompt);
 
-        var output = new List<ChatPromptMessage>(prompt.Messages.Count);
+        var output = new List<ChatMessage>(prompt.Messages.Count);
         foreach (var message in prompt.Messages)
         {
-            var renderable = message.Sections
-                .OrderBy(s => s.Order)
-                .Where(s => s.HasRenderableContent())
-                .ToList();
-
+            var renderable = message.RenderableSections();
             if (renderable.Count == 0)
             {
                 continue;
             }
 
-            // Section names are metadata, not content — they are deliberately not emitted as
-            // text blocks. Provider adapters that want to surface section labels should expose
-            // them as message-level metadata, not inline content the model has to parse around.
-            var blocks = new List<ChatContentBlock>(renderable.Count);
-            foreach (var section in renderable)
-            {
-                blocks.Add(MapContent(section.Content));
-            }
-            output.Add(new ChatPromptMessage(message.Role.ToApiString(), blocks));
+            var content = renderable.Select(s => s.Content).ToList();
+            output.Add(new ChatMessage(message.Role.ToApiString(), content));
         }
         return output;
     }
-
-    private static ChatContentBlock MapContent(PromptContent content) =>
-        content switch
-        {
-            TextContent t => new ChatTextBlock(t.Text),
-            ImageContent i => new ChatImageBlock(i.Data, i.MediaType),
-            ToolCallContent c => new ChatToolCallBlock(c.ToolCallId, c.ToolName, c.ArgumentsJson),
-            ToolResultContent r => new ChatToolResultBlock(
-                r.ToolCallId,
-                r.Output.Select(MapContent).ToList(),
-                r.IsError),
-            _ => throw new NotSupportedException(
-                $"Unsupported PromptContent type: {content.GetType().FullName}"),
-        };
 }

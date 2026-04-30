@@ -96,12 +96,4 @@ public class BuiltPromptJsonSerializerTests
         Assert.Throws<PromptSerializationException>(() => BuiltPromptJsonSerializer.Deserialize("{ broken"));
     }
 
-    [Fact]
-    public void JsonBuiltPromptRenderer_DelegatesToSerializer()
-    {
-        var prompt = SamplePrompt();
-        var rendererOutput = new JsonBuiltPromptRenderer().Render(prompt);
-        var serializerOutput = BuiltPromptJsonSerializer.Serialize(prompt);
-        Assert.Equal(serializerOutput, rendererOutput);
-    }
 }

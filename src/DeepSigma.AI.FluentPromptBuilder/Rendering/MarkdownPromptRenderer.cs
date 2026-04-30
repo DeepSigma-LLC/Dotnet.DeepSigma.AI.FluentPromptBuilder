@@ -44,11 +44,7 @@ public sealed class MarkdownPromptRenderer : IPromptRenderer<string>
         var sb = new StringBuilder();
         foreach (var message in prompt.Messages)
         {
-            var renderable = message.Sections
-                .OrderBy(s => s.Order)
-                .Where(s => s.HasRenderableContent())
-                .ToList();
-
+            var renderable = message.RenderableSections();
             if (renderable.Count == 0)
             {
                 continue;

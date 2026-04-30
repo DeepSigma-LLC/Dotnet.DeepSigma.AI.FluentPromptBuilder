@@ -12,10 +12,9 @@ namespace DeepSigma.AI.FluentPromptBuilder.Rendering;
 /// <c>tool_result</c>) as stored prompt templates.
 /// </summary>
 /// <remarks>
-/// Section names are not emitted (they are metadata, not content), and sections whose text is
-/// empty/whitespace are dropped per <see cref="PromptSectionExtensions.HasRenderableContent"/>.
-/// Provider-specific JSON shapes (OpenAI, Anthropic) are out of scope for this renderer; build
-/// them in dedicated adapter packages.
+/// Internally delegates to <see cref="ChatMessageRenderer"/> for the message-shaping pass and
+/// then serialises the resulting <see cref="ChatMessage"/> list to JSON. Provider-specific
+/// JSON shapes (OpenAI, Anthropic) are out of scope for this renderer.
 /// </remarks>
 public sealed class JsonChatPromptRenderer : IPromptRenderer<string>
 {
@@ -31,6 +30,8 @@ public sealed class JsonChatPromptRenderer : IPromptRenderer<string>
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     };
 
+    private static readonly ChatMessageRenderer ChatRenderer = new();
+
     /// <summary>Whether to indent the JSON output (default: <c>true</c>).</summary>
     public bool Indented { get; }
 
@@ -45,26 +46,13 @@ public sealed class JsonChatPromptRenderer : IPromptRenderer<string>
     {
         ArgumentNullException.ThrowIfNull(prompt);
 
-        var messages = new List<ChatMessageJsonDto>(prompt.Messages.Count);
-        foreach (var message in prompt.Messages)
-        {
-            var blocks = message.Sections
-                .OrderBy(s => s.Order)
-                .Where(s => s.HasRenderableContent())
-                .Select(s => TemplateMapper.ContentToDto(s.Content))
-                .ToList();
-
-            if (blocks.Count == 0)
+        var messages = ChatRenderer.Render(prompt)
+            .Select(m => new ChatMessageJsonDto
             {
-                continue;
-            }
-
-            messages.Add(new ChatMessageJsonDto
-            {
-                Role = message.Role.ToApiString(),
-                Content = blocks,
-            });
-        }
+                Role = m.Role,
+                Content = m.Content.Select(TemplateMapper.ContentToDto).ToList(),
+            })
+            .ToList();
 
         return JsonSerializer.Serialize(messages, Indented ? IndentedOptions : CompactOptions);
     }

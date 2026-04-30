@@ -162,7 +162,7 @@ public class EmptySectionSuppressionTests
         // One block — content for the one filled section. Empty section dropped.
         // Section names are not emitted as content blocks.
         var only = Assert.Single(msg.Content);
-        Assert.Equal("hello", Assert.IsType<ChatTextBlock>(only).Text);
+        Assert.Equal("hello", Assert.IsType<TextContent>(only).Text);
     }
 
     [Fact]
@@ -219,7 +219,7 @@ public class ChatMessageRendererTests
 
         Assert.Equal("user", msg.Role);
         var only = Assert.Single(msg.Content);
-        Assert.Equal("Summarize.", Assert.IsType<ChatTextBlock>(only).Text);
+        Assert.Equal("Summarize.", Assert.IsType<TextContent>(only).Text);
     }
 
     [Fact]
@@ -240,18 +240,18 @@ public class ChatMessageRendererTests
         // user: 2 sections -> 2 content blocks (text + image), no section-name headers
         Assert.Equal("user", msgs[0].Role);
         Assert.Equal(2, msgs[0].Content.Count);
-        Assert.Equal("What is this?", Assert.IsType<ChatTextBlock>(msgs[0].Content[0]).Text);
-        var image = Assert.IsType<ChatImageBlock>(msgs[0].Content[1]);
+        Assert.Equal("What is this?", Assert.IsType<TextContent>(msgs[0].Content[0]).Text);
+        var image = Assert.IsType<ImageContent>(msgs[0].Content[1]);
         Assert.Equal("image/jpeg", image.MediaType);
         Assert.Equal(bytes, image.Data.ToArray());
 
-        // assistant: 1 tool-call block
-        var call = Assert.IsType<ChatToolCallBlock>(Assert.Single(msgs[1].Content));
+        // assistant: 1 tool-call block — content payload is reused PromptContent, no parallel hierarchy
+        var call = Assert.IsType<ToolCallContent>(Assert.Single(msgs[1].Content));
         Assert.Equal("c1", call.ToolCallId);
 
         // tool: 1 tool-result block
-        var result = Assert.IsType<ChatToolResultBlock>(Assert.Single(msgs[2].Content));
+        var result = Assert.IsType<ToolResultContent>(Assert.Single(msgs[2].Content));
         Assert.Equal("c1", result.ToolCallId);
-        Assert.Equal("done", Assert.IsType<ChatTextBlock>(result.Output[0]).Text);
+        Assert.Equal("done", Assert.IsType<TextContent>(result.Output[0]).Text);
     }
 }
