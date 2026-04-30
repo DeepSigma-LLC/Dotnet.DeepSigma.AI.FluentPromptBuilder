@@ -3,7 +3,8 @@
     "allow": [
       "Bash(dotnet test *)",
       "Bash(dotnet build *)",
-      "Bash(xargs wc *)"
+      "Bash(xargs wc *)",
+      "Bash(dotnet run *)"
     ]
   }
 }

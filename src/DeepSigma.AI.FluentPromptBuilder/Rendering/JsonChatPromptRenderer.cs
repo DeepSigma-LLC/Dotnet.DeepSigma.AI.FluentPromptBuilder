@@ -1,3 +1,4 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using DeepSigma.AI.FluentPromptBuilder.Domain;
@@ -18,16 +19,20 @@ namespace DeepSigma.AI.FluentPromptBuilder.Rendering;
 /// </remarks>
 public sealed class JsonChatPromptRenderer : IPromptRenderer<string>
 {
+    // UnsafeRelaxedJsonEscaping: this JSON is for LLM bodies, not HTML. The strict default
+    // encoder escapes ', ", <, >, & as ' etc. which clutters the output and bloats tokens.
     private static readonly JsonSerializerOptions IndentedOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
     private static readonly JsonSerializerOptions CompactOptions = new(JsonSerializerDefaults.Web)
     {
         WriteIndented = false,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        Encoder = JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
     };
 
     private static readonly ChatMessageRenderer ChatRenderer = new();

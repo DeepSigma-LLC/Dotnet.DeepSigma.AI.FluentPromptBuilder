@@ -257,6 +257,191 @@ services.AddPostgresPromptRepository(dataSource);
 
 ---
 
+## What each renderer produces
+
+Captured from the sample console; copy-paste reproducible by running
+`dotnet run --project samples/DeepSigma.AI.FluentPromptBuilder.Sample`.
+
+### Source — text-only manual prompt
+
+```csharp
+var prompt = PromptBuilder.Create()
+    .System("You are a helpful technical assistant.")
+    .User(u => u
+        .Section("Task", "Summarize the following error.")
+        .Section("Error", "NullReferenceException at MyService.Process(line 42)."))
+    .Build();
+```
+
+**`MarkdownPromptRenderer`**
+
+```text
+## System
+
+### System
+You are a helpful technical assistant.
+
+## User
+
+### Task
+Summarize the following error.
+
+### Error
+NullReferenceException at MyService.Process(line 42).
+```
+
+**`JsonChatPromptRenderer`**
+
+```json
+[
+  {
+    "role": "system",
+    "content": [
+      { "type": "text", "text": "You are a helpful technical assistant." }
+    ]
+  },
+  {
+    "role": "user",
+    "content": [
+      { "type": "text", "text": "Summarize the following error." },
+      { "type": "text", "text": "NullReferenceException at MyService.Process(line 42)." }
+    ]
+  }
+]
+```
+
+**`PlainTextPromptRenderer(PlainTextStyle.ContentOnly)`** — the default
+
+```text
+You are a helpful technical assistant.
+
+Summarize the following error.
+
+NullReferenceException at MyService.Process(line 42).
+```
+
+**`PlainTextPromptRenderer(PlainTextStyle.Transcript)`**
+
+```text
+[System]
+You are a helpful technical assistant.
+
+[User]
+Summarize the following error.
+
+NullReferenceException at MyService.Process(line 42).
+```
+
+**`PlainTextPromptRenderer(PlainTextStyle.Labeled)`**
+
+```text
+System
+  System:
+    You are a helpful technical assistant.
+
+User
+  Task:
+    Summarize the following error.
+  Error:
+    NullReferenceException at MyService.Process(line 42).
+```
+
+---
+
+### Source — multimodal prompt (image + tool-call + tool-result)
+
+```csharp
+var prompt = PromptBuilder.Create()
+    .User(u => u
+        .Section("Question", "What's in this image?")
+        .ImageSection("Photo", new byte[] { 0x89, 0x50, 0x4E, 0x47 }, "image/png"))
+    .Assistant(a => a
+        .Section("Reply", "Let me look that up.")
+        .ToolCallSection("Call",
+            toolCallId: "call_1",
+            toolName: "lookup",
+            argumentsJson: """{"q":"png-header"}"""))
+    .Tool(t => t.ToolResultSection(
+        "Result", toolCallId: "call_1",
+        output: [new TextContent("PNG file signature.")]))
+    .Build();
+```
+
+**`ChatMessageRenderer`** — structured `IReadOnlyList<ChatMessage>` (printed via the sample's `Describe` helper):
+
+```text
+[user] (2 blocks)
+  text: What's in this image?
+  image: image/png, 4 bytes
+[assistant] (2 blocks)
+  text: Let me look that up.
+  tool_call: lookup (id=call_1) args={"q":"png-header"}
+[tool] (1 block)
+  tool_result: id=call_1, isError=False, 1 nested block(s)
+```
+
+**`JsonChatPromptRenderer`** — image bytes base64-encoded, tool-call/result use the same tagged-discriminator schema as stored templates:
+
+```json
+[
+  {
+    "role": "user",
+    "content": [
+      { "type": "text", "text": "What's in this image?" },
+      { "type": "image", "mediaType": "image/png", "data": "iVBORw==" }
+    ]
+  },
+  {
+    "role": "assistant",
+    "content": [
+      { "type": "text", "text": "Let me look that up." },
+      {
+        "type": "tool_call",
+        "toolCallId": "call_1",
+        "toolName": "lookup",
+        "argumentsJson": "{\"q\":\"png-header\"}"
+      }
+    ]
+  },
+  {
+    "role": "tool",
+    "content": [
+      {
+        "type": "tool_result",
+        "toolCallId": "call_1",
+        "isError": false,
+        "output": [
+          { "type": "text", "text": "PNG file signature." }
+        ]
+      }
+    ]
+  }
+]
+```
+
+**`PlainTextPromptRenderer(PlainTextStyle.Labeled)`** — images become a placeholder line, tool calls/results become bracketed text:
+
+```text
+User
+  Question:
+    What's in this image?
+  Photo:
+    [image: image/png, 4 bytes]
+
+Assistant
+  Reply:
+    Let me look that up.
+  Call:
+    [tool_call lookup(call_1): {"q":"png-header"}]
+
+Tool
+  Result:
+    [tool_result call_1]
+    PNG file signature.
+```
+
+---
+
 ## File schema (v1)
 
 ```json
