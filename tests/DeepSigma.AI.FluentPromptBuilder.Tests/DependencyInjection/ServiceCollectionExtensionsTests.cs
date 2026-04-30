@@ -21,8 +21,15 @@ public class ServiceCollectionExtensionsTests
         Assert.NotNull(provider.GetRequiredService<ITemplateRenderer>());
         Assert.NotNull(provider.GetRequiredService<IPromptFactory>());
         Assert.NotNull(provider.GetRequiredService<IPromptRepository>());
-        Assert.NotNull(provider.GetRequiredService<IPromptRenderer<string>>());
+        // Default IPromptRenderer<string> resolves to MarkdownPromptRenderer.
+        Assert.IsType<MarkdownPromptRenderer>(provider.GetRequiredService<IPromptRenderer<string>>());
         Assert.NotNull(provider.GetRequiredService<IPromptRenderer<IReadOnlyList<ChatPromptMessage>>>());
+
+        // JSON renderers and concrete markdown/chat are also resolvable by concrete type.
+        Assert.NotNull(provider.GetRequiredService<MarkdownPromptRenderer>());
+        Assert.NotNull(provider.GetRequiredService<ChatMessageRenderer>());
+        Assert.NotNull(provider.GetRequiredService<JsonChatPromptRenderer>());
+        Assert.NotNull(provider.GetRequiredService<JsonBuiltPromptRenderer>());
     }
 
     [Fact]

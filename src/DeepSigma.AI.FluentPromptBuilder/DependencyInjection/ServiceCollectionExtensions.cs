@@ -23,8 +23,16 @@ public static class ServiceCollectionExtensions
 
         services.AddSingleton<ITemplateRenderer, DefaultTemplateRenderer>();
         services.AddSingleton<IPromptFactory, PromptFactory>();
+
+        // Default IPromptRenderer<string> is markdown. JSON renderers are also registered as
+        // their concrete types so consumers can resolve them explicitly without a key, e.g.
+        // sp.GetRequiredService<JsonChatPromptRenderer>().
         services.AddSingleton<IPromptRenderer<string>, MarkdownPromptRenderer>();
         services.AddSingleton<IPromptRenderer<IReadOnlyList<ChatPromptMessage>>, ChatMessageRenderer>();
+        services.AddSingleton<MarkdownPromptRenderer>();
+        services.AddSingleton<ChatMessageRenderer>();
+        services.AddSingleton<JsonChatPromptRenderer>();
+        services.AddSingleton<JsonBuiltPromptRenderer>();
 
         return services;
     }

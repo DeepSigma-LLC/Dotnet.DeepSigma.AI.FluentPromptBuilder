@@ -76,6 +76,19 @@ var chatMessages = new ChatMessageRenderer().Render(prompt);
 // feed straight into a provider adapter without re-parsing strings.
 ```
 
+There are also two JSON renderers:
+
+```csharp
+// Provider-neutral chat-message JSON — flat shape suitable for forwarding to an LLM.
+// Drops section names, drops empty sections, lowercase roles, tagged content discriminator.
+string chatJson = new JsonChatPromptRenderer().Render(prompt);
+
+// Round-trip-friendly JSON in the same v1 schema as stored templates — preserves
+// section names, ordering, and Source. Useful for caching, audit logs, transport.
+string roundTripJson = new JsonBuiltPromptRenderer().Render(prompt);
+var rebuilt = BuiltPromptJsonSerializer.Deserialize(roundTripJson);
+```
+
 ### 3. Templates with variable substitution
 
 ```csharp

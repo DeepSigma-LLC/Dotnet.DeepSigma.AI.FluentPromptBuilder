@@ -50,14 +50,14 @@ internal static class TemplateMapper
             MetadataFromDto(dto.Metadata));
     }
 
-    private static PromptMessageDto MessageToDto(PromptMessage m) =>
+    internal static PromptMessageDto MessageToDto(PromptMessage m) =>
         new()
         {
             Role = m.Role.ToString(),
             Sections = m.Sections.Select(SectionToDto).ToList(),
         };
 
-    private static PromptMessage MessageFromDto(PromptMessageDto dto)
+    internal static PromptMessage MessageFromDto(PromptMessageDto dto)
     {
         if (!Enum.TryParse<PromptRole>(dto.Role, ignoreCase: false, out var role))
         {
@@ -78,7 +78,7 @@ internal static class TemplateMapper
     private static PromptSection SectionFromDto(PromptSectionDto dto) =>
         new(dto.Name, ContentFromDto(dto.Content), dto.Order);
 
-    private static PromptContentDto ContentToDto(PromptContent content) =>
+    internal static PromptContentDto ContentToDto(PromptContent content) =>
         content switch
         {
             TextContent t => new TextContentDto { Text = t.Text },
@@ -103,7 +103,7 @@ internal static class TemplateMapper
                 $"Cannot serialize unsupported content type: {content.GetType().FullName}"),
         };
 
-    private static PromptContent ContentFromDto(PromptContentDto dto) =>
+    internal static PromptContent ContentFromDto(PromptContentDto dto) =>
         dto switch
         {
             TextContentDto t => new TextContent(t.Text),
