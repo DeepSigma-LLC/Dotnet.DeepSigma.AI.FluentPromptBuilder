@@ -89,6 +89,26 @@ string roundTripJson = new JsonBuiltPromptRenderer().Render(prompt);
 var rebuilt = BuiltPromptJsonSerializer.Deserialize(roundTripJson);
 ```
 
+…and a plain-text renderer with three layout styles:
+
+```csharp
+// A — content only (default). Just the text, blank-line separated. No labels.
+//     Best for legacy single-string completion APIs.
+string text = new PlainTextPromptRenderer().Render(prompt);
+
+// B — transcript style. [Role] headers, sections concatenated underneath.
+//     Best for human-readable logs.
+string transcript = new PlainTextPromptRenderer(PlainTextStyle.Transcript).Render(prompt);
+
+// C — labeled. Role line + indented "  Section:" labels for each section.
+//     Best when section names carry meaning consumers should read.
+string labelled = new PlainTextPromptRenderer(PlainTextStyle.Labeled).Render(prompt);
+```
+
+Plain text can't embed images, so they render as `[image: image/png, N bytes]`. Tool calls
+render as `[tool_call name(id): args]` and tool results as a labelled block with their nested
+content recursively rendered.
+
 ### 3. Templates with variable substitution
 
 ```csharp

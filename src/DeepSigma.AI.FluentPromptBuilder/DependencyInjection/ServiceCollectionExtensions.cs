@@ -33,6 +33,7 @@ public static class ServiceCollectionExtensions
         services.AddSingleton<ChatMessageRenderer>();
         services.AddSingleton<JsonChatPromptRenderer>();
         services.AddSingleton<JsonBuiltPromptRenderer>();
+        services.AddSingleton<PlainTextPromptRenderer>();
 
         return services;
     }

@@ -30,6 +30,7 @@ public class ServiceCollectionExtensionsTests
         Assert.NotNull(provider.GetRequiredService<ChatMessageRenderer>());
         Assert.NotNull(provider.GetRequiredService<JsonChatPromptRenderer>());
         Assert.NotNull(provider.GetRequiredService<JsonBuiltPromptRenderer>());
+        Assert.NotNull(provider.GetRequiredService<PlainTextPromptRenderer>());
     }
 
     [Fact]
