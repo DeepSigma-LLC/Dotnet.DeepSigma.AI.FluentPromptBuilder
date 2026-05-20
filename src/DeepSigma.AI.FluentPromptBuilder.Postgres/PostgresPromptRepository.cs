@@ -1,15 +1,14 @@
-using System.Data.Common;
-using Dapper;
 using DeepSigma.AI.FluentPromptBuilder.Domain;
 using DeepSigma.AI.FluentPromptBuilder.Exceptions;
 using DeepSigma.AI.FluentPromptBuilder.Repositories;
 using DeepSigma.AI.FluentPromptBuilder.Serialization;
-using Npgsql;
+using DeepSigma.DataAccess.RelationalDatabase;
 
 namespace DeepSigma.AI.FluentPromptBuilder.Postgres;
 
 /// <summary>
-/// A Postgres-backed <see cref="IPromptRepository"/> using Dapper + Npgsql. Templates are
+/// A Postgres-backed <see cref="IPromptRepository"/> using
+/// <see cref="RelationalDatabaseApi"/> from DeepSigma.DataAccess.Postgres. Templates are
 /// stored as <c>jsonb</c> in the format produced by
 /// <see cref="PromptTemplateJsonSerializer"/>, keyed by <c>(namespace, name, major, minor, patch)</c>.
 /// </summary>
@@ -17,47 +16,30 @@ namespace DeepSigma.AI.FluentPromptBuilder.Postgres;
 /// <para>v1 is read-only; populate the table from your own migration tool, seed script, or
 /// admin UI. Future versions may add a separate write-side concrete API.</para>
 /// </remarks>
-public sealed class PostgresPromptRepository : IPromptRepository, IDisposable, IAsyncDisposable
+public sealed class PostgresPromptRepository : IPromptRepository
 {
-    private readonly NpgsqlDataSource _dataSource;
-    private readonly bool _ownsDataSource;
+    private readonly RelationalDatabaseApi _db;
     private readonly string _tableName;
 
     /// <summary>The table name this repository reads from.</summary>
     public string TableName => _tableName;
 
     /// <summary>
-    /// Constructs a repository that owns its own <see cref="NpgsqlDataSource"/> built from the
-    /// supplied connection string.
+    /// Constructs a repository over the supplied <see cref="RelationalDatabaseApi"/>.
     /// </summary>
-    /// <param name="connectionString">A standard Postgres connection string.</param>
+    /// <param name="db">The relational-database API (typically resolved from DI).</param>
     /// <param name="tableName">Optional table-name override (default: <c>prompt_templates</c>).</param>
-    public PostgresPromptRepository(string connectionString, string tableName = PostgresSchema.DefaultTableName)
+    public PostgresPromptRepository(RelationalDatabaseApi db, string tableName = PostgresSchema.DefaultTableName)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
+        ArgumentNullException.ThrowIfNull(db);
         PostgresSchema.ValidateIdentifier(tableName);
 
-        _dataSource = NpgsqlDataSource.Create(connectionString);
-        _ownsDataSource = true;
-        _tableName = tableName;
-    }
-
-    /// <summary>
-    /// Constructs a repository that uses a caller-managed <see cref="NpgsqlDataSource"/>. The
-    /// caller is responsible for the data source lifetime.
-    /// </summary>
-    public PostgresPromptRepository(NpgsqlDataSource dataSource, string tableName = PostgresSchema.DefaultTableName)
-    {
-        ArgumentNullException.ThrowIfNull(dataSource);
-        PostgresSchema.ValidateIdentifier(tableName);
-
-        _dataSource = dataSource;
-        _ownsDataSource = false;
+        _db = db;
         _tableName = tableName;
     }
 
     /// <inheritdoc/>
-    public async Task<PromptTemplate?> GetTemplateAsync(
+    public Task<PromptTemplate?> GetTemplateAsync(
         PromptKey key,
         PromptVersion version,
         CancellationToken cancellationToken = default)
@@ -75,21 +57,16 @@ public sealed class PostgresPromptRepository : IPromptRepository, IDisposable, I
             LIMIT 1
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        var json = await connection.QuerySingleOrDefaultAsync<string?>(
-            new CommandDefinition(
-                sql,
-                new
-                {
-                    Namespace = key.Namespace,
-                    Name = key.Name,
-                    Major = version.Major,
-                    Minor = version.Minor,
-                    Patch = version.Patch,
-                },
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
+        var parameters = new
+        {
+            Namespace = key.Namespace,
+            Name = key.Name,
+            Major = version.Major,
+            Minor = version.Minor,
+            Patch = version.Patch,
+        };
 
-        return json is null ? null : DeserializeOrThrow(json, key, version);
+        return LoadSingleTemplateAsync(sql, parameters, key, version, cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -107,7 +84,7 @@ public sealed class PostgresPromptRepository : IPromptRepository, IDisposable, I
     /// Returns the highest-versioned template for <paramref name="key"/> whose status equals
     /// <paramref name="status"/>, or <c>null</c> if no such row exists.
     /// </summary>
-    public async Task<PromptTemplate?> GetLatestAsync(
+    public Task<PromptTemplate?> GetLatestAsync(
         PromptKey key,
         PromptStatus status,
         CancellationToken cancellationToken = default)
@@ -124,19 +101,14 @@ public sealed class PostgresPromptRepository : IPromptRepository, IDisposable, I
             LIMIT 1
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        var json = await connection.QuerySingleOrDefaultAsync<string?>(
-            new CommandDefinition(
-                sql,
-                new
-                {
-                    Namespace = key.Namespace,
-                    Name = key.Name,
-                    StatusId = (short)status,
-                },
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
+        var parameters = new
+        {
+            Namespace = key.Namespace,
+            Name = key.Name,
+            StatusId = (short)status,
+        };
 
-        return json is null ? null : DeserializeOrThrow(json, key, version: null);
+        return LoadSingleTemplateAsync(sql, parameters, key, version: null, cancellationToken);
     }
 
     /// <inheritdoc/>
@@ -154,55 +126,26 @@ public sealed class PostgresPromptRepository : IPromptRepository, IDisposable, I
             ORDER BY version_major ASC, version_minor ASC, version_patch ASC
             """;
 
-        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        var rows = await connection.QueryAsync<VersionRow>(
-            new CommandDefinition(
-                sql,
-                new { Namespace = key.Namespace, Name = key.Name },
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
+        var rows = await _db.GetAllAsync<object, VersionRow>(
+            sql,
+            new { Namespace = key.Namespace, Name = key.Name },
+            cancellationToken: cancellationToken).ConfigureAwait(false);
 
         return rows.Select(r => new PromptVersion(r.Major, r.Minor, r.Patch)).ToList();
     }
 
-    /// <summary>
-    /// Idempotently creates the lookup table, the main table, the helper index, and seeds the
-    /// four <see cref="PromptStatus"/> rows. Intended for local/dev scenarios; production
-    /// deployments should use a real migration tool.
-    /// </summary>
-    public static async Task EnsureSchemaCreatedAsync(
-        string connectionString,
-        string tableName = PostgresSchema.DefaultTableName,
-        string statusTableName = PostgresSchema.DefaultStatusTableName,
-        CancellationToken cancellationToken = default)
+    private async Task<PromptTemplate?> LoadSingleTemplateAsync(
+        string sql,
+        object parameters,
+        PromptKey key,
+        PromptVersion? version,
+        CancellationToken cancellationToken)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
-        PostgresSchema.ValidateIdentifier(tableName);
-        PostgresSchema.ValidateIdentifier(statusTableName);
+        var rows = await _db.GetAllAsync<object, string?>(
+            sql, parameters, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        await using var dataSource = NpgsqlDataSource.Create(connectionString);
-        await using var connection = await dataSource.OpenConnectionAsync(cancellationToken).ConfigureAwait(false);
-        await connection.ExecuteAsync(
-            new CommandDefinition(
-                PostgresSchema.CreateSchemaSql(tableName, statusTableName),
-                cancellationToken: cancellationToken)).ConfigureAwait(false);
-    }
-
-    /// <inheritdoc/>
-    public void Dispose()
-    {
-        if (_ownsDataSource)
-        {
-            _dataSource.Dispose();
-        }
-    }
-
-    /// <inheritdoc/>
-    public async ValueTask DisposeAsync()
-    {
-        if (_ownsDataSource)
-        {
-            await _dataSource.DisposeAsync().ConfigureAwait(false);
-        }
+        var json = rows.FirstOrDefault();
+        return json is null ? null : DeserializeOrThrow(json, key, version);
     }
 
     private static PromptTemplate DeserializeOrThrow(string json, PromptKey key, PromptVersion? version)

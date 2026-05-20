@@ -1,6 +1,6 @@
 using DeepSigma.AI.FluentPromptBuilder.Repositories;
+using DeepSigma.DataAccess.RelationalDatabase;
 using Microsoft.Extensions.DependencyInjection;
-using Npgsql;
 
 namespace DeepSigma.AI.FluentPromptBuilder.Postgres;
 
@@ -8,10 +8,9 @@ namespace DeepSigma.AI.FluentPromptBuilder.Postgres;
 public static class ServiceCollectionExtensions
 {
     /// <summary>
-    /// Registers <see cref="PostgresPromptRepository"/> as the singleton
-    /// <see cref="IPromptRepository"/>, building its own <see cref="NpgsqlDataSource"/> from the
-    /// supplied connection string. The repository (and its data source) is disposed when the DI
-    /// container is disposed.
+    /// Registers the DeepSigma.DataAccess.Postgres provider (connection factory,
+    /// <see cref="RelationalDatabaseApi"/>, schema service, bulk copier) and registers
+    /// <see cref="PostgresPromptRepository"/> as the singleton <see cref="IPromptRepository"/>.
     /// </summary>
     public static IServiceCollection AddPostgresPromptRepository(
         this IServiceCollection services,
@@ -22,27 +21,9 @@ public static class ServiceCollectionExtensions
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
         PostgresSchema.ValidateIdentifier(tableName);
 
-        services.AddSingleton<IPromptRepository>(_ =>
-            new PostgresPromptRepository(connectionString, tableName));
-        return services;
-    }
-
-    /// <summary>
-    /// Registers <see cref="PostgresPromptRepository"/> as the singleton
-    /// <see cref="IPromptRepository"/> using a caller-managed <see cref="NpgsqlDataSource"/>.
-    /// The data source's lifetime is the caller's responsibility.
-    /// </summary>
-    public static IServiceCollection AddPostgresPromptRepository(
-        this IServiceCollection services,
-        NpgsqlDataSource dataSource,
-        string tableName = PostgresSchema.DefaultTableName)
-    {
-        ArgumentNullException.ThrowIfNull(services);
-        ArgumentNullException.ThrowIfNull(dataSource);
-        PostgresSchema.ValidateIdentifier(tableName);
-
-        services.AddSingleton<IPromptRepository>(_ =>
-            new PostgresPromptRepository(dataSource, tableName));
+        services.AddDeepSigmaPostgres(connectionString);
+        services.AddSingleton<IPromptRepository>(sp =>
+            new PostgresPromptRepository(sp.GetRequiredService<RelationalDatabaseApi>(), tableName));
         return services;
     }
 }

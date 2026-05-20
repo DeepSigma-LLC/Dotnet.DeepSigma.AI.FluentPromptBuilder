@@ -218,7 +218,7 @@ CREATE INDEX IF NOT EXISTS idx_prompt_templates_key_lookup
 
 Apply via your migration tool of choice (Flyway, dbup, EF migrations, manual SQL). Or
 call `PostgresSchema.CreateSchemaSql()` to obtain the DDL programmatically. For local/dev
-scenarios there's also `PostgresPromptRepository.EnsureSchemaCreatedAsync(connectionString)`
+scenarios there's also `PostgresPromptSchemaInitializer.EnsureCreatedAsync(connectionString)`
 which runs the idempotent DDL for you.
 
 #### UUIDv7 expected for `id`
@@ -247,13 +247,11 @@ explicit answer.
 The repository is **read-only in v1** — populate the table from your own seed script,
 migration, or admin UI. Write methods (`Upsert`, `Delete`) are on the roadmap.
 
-If you already manage your own `NpgsqlDataSource` (recommended for production), pass it
-directly:
-
-```csharp
-using var dataSource = NpgsqlDataSource.Create(connectionString);
-services.AddPostgresPromptRepository(dataSource);
-```
+Under the hood the repository runs on
+[`DeepSigma.DataAccess.Postgres`](https://www.nuget.org/packages/DeepSigma.DataAccess.Postgres),
+so `AddPostgresPromptRepository(connectionString)` also registers `RelationalDatabaseApi`,
+`IDbConnectionFactory`, and the schema / bulk-copy services from that package — handy if
+your app already uses them.
 
 ---
 

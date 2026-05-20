@@ -1,8 +1,8 @@
 using DeepSigma.AI.FluentPromptBuilder.DependencyInjection;
 using DeepSigma.AI.FluentPromptBuilder.Postgres;
 using DeepSigma.AI.FluentPromptBuilder.Repositories;
+using DeepSigma.DataAccess.RelationalDatabase;
 using Microsoft.Extensions.DependencyInjection;
-using Npgsql;
 using Xunit;
 
 namespace DeepSigma.AI.FluentPromptBuilder.Postgres.Tests;
@@ -24,16 +24,15 @@ public class ServiceCollectionExtensionsTests
     }
 
     [Fact]
-    public void AddPostgresPromptRepository_DataSource_RegistersIPromptRepository()
+    public void AddPostgresPromptRepository_RegistersRelationalDatabaseApi()
     {
-        using var dataSource = NpgsqlDataSource.Create(Conn);
         var services = new ServiceCollection()
             .AddFluentPromptBuilder()
-            .AddPostgresPromptRepository(dataSource);
+            .AddPostgresPromptRepository(Conn);
 
         using var provider = services.BuildServiceProvider();
-        var repo = provider.GetRequiredService<IPromptRepository>();
-        Assert.IsType<PostgresPromptRepository>(repo);
+        var api = provider.GetRequiredService<RelationalDatabaseApi>();
+        Assert.NotNull(api);
     }
 
     [Fact]
