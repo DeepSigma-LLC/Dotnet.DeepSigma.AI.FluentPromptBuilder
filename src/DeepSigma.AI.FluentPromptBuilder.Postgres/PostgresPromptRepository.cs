@@ -141,10 +141,9 @@ public sealed class PostgresPromptRepository : IPromptRepository
         PromptVersion? version,
         CancellationToken cancellationToken)
     {
-        var rows = await _db.GetAllAsync<object, string?>(
+        var json = await _db.QuerySingleOrDefaultAsync<object, string?>(
             sql, parameters, cancellationToken: cancellationToken).ConfigureAwait(false);
 
-        var json = rows.FirstOrDefault();
         return json is null ? null : DeserializeOrThrow(json, key, version);
     }
 
