@@ -21,6 +21,10 @@ public static class PromptTemplateJsonSerializer
         PropertyNameCaseInsensitive = false,
         WriteIndented = true,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+        // Storage backends like PostgreSQL `jsonb` do not preserve key order, so the polymorphic
+        // `type` discriminator may not appear first on read. .NET 9+ supports out-of-order
+        // discriminators via this flag; without it, `jsonb`-round-tripped JSON fails to deserialize.
+        AllowOutOfOrderMetadataProperties = true,
         Converters = { new JsonStringEnumConverter() },
     };
 

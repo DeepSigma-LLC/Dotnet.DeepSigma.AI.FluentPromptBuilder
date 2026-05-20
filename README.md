@@ -244,8 +244,32 @@ var draft = await repository.GetLatestAsync(key, PromptStatus.Draft);
 `GetTemplateAsync(key, version)` returns the row regardless of status — explicit ask,
 explicit answer.
 
-The repository is **read-only in v1** — populate the table from your own seed script,
-migration, or admin UI. Write methods (`Upsert`, `Delete`) are on the roadmap.
+#### Writes
+
+The repository supports an immutability-preserving write surface:
+
+```csharp
+// 1. Insert a new template — defaults to Draft, generates a UUIDv7 id.
+await repository.InsertAsync(template, createdBy: "alice@example.com");
+
+// 2. Iterate on the draft. Content is mutable only while the row is Draft.
+await repository.UpdateContentAsync(revisedTemplate);
+
+// 3. Promote it forward through the lifecycle.
+await repository.SetStatusAsync(key, version, PromptStatus.Published);
+await repository.SetStatusAsync(key, version, PromptStatus.Deprecated); // also sets deprecated_at = now()
+```
+
+Rules:
+
+- **Insert is unique by `(namespace, name, version)`** — duplicates throw `PromptWriteConflictException`.
+- **`UpdateContentAsync` only works on `Draft` rows.** Once published, content is immutable: bump
+  the version and `InsertAsync` a new row. (Wording-as-behavior — even small prompt edits can
+  change model output, so version identity must be reproducible.)
+- **`SetStatusAsync` is forward-only:** `Draft → Published → Deprecated → Archived`. Backward
+  or same-status transitions throw `PromptWriteConflictException`.
+- **Hard delete is not supported.** Archive via `SetStatusAsync(..., PromptStatus.Archived)` —
+  preserves the audit trail.
 
 Under the hood the repository runs on
 [`DeepSigma.DataAccess.Postgres`](https://www.nuget.org/packages/DeepSigma.DataAccess.Postgres),
