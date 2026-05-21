@@ -181,7 +181,7 @@ var prompt = await factory.BuildLatestAsync(
 
 Templates are stored as `jsonb` in the same v1 wire format used by the file repository.
 The schema uses a surrogate UUID primary key, a status lookup table with foreign-key
-reference, and audit columns for `created_by` / `deprecated_at`:
+reference, and audit columns for `created_by`, `deprecated_at`, and `archived_at`:
 
 ```sql
 CREATE TABLE IF NOT EXISTS prompt_template_statuses (
@@ -208,6 +208,7 @@ CREATE TABLE IF NOT EXISTS prompt_templates (
     created_at     timestamptz  NOT NULL DEFAULT now(),
     created_by     text         NULL,
     deprecated_at  timestamptz  NULL,
+    archived_at    timestamptz  NULL,                       -- added in migration 0002
     UNIQUE (namespace, name, version_major, version_minor, version_patch)
 );
 
@@ -216,10 +217,16 @@ CREATE INDEX IF NOT EXISTS idx_prompt_templates_key_lookup
                          version_major DESC, version_minor DESC, version_patch DESC);
 ```
 
-Apply via your migration tool of choice (Flyway, dbup, EF migrations, manual SQL). Or
-call `PostgresSchema.CreateSchemaSql()` to obtain the DDL programmatically. For local/dev
-scenarios there's also `PostgresPromptSchemaInitializer.EnsureCreatedAsync(connectionString)`
-which runs the idempotent DDL for you.
+The schema is migration-managed via
+[`DeepSigma.DataAccess.RelationalDatabase.MigrationRunner`](https://www.nuget.org/packages/DeepSigma.DataAccess.RelationalDatabase):
+`PostgresPromptSchemaInitializer.EnsureCreatedAsync(connectionString)` applies pending
+migrations idempotently (returns the ids that were newly applied this call). It is safe to
+call repeatedly and safe to call against a database created by an earlier version of this
+package — the initial migration's DDL is `IF NOT EXISTS`-guarded.
+
+Production deployments may prefer to drive their own migration tool of choice
+(Flyway, dbup, EF migrations, manual SQL) — feed it `PostgresSchema.CreateSchemaSql()` for
+the initial DDL, or `PostgresSchema.GetMigrations()` for the full versioned migration list.
 
 #### UUIDv7 expected for `id`
 
@@ -246,18 +253,31 @@ explicit answer.
 
 #### Writes
 
-The repository supports an immutability-preserving write surface:
+The write methods live on the concrete `PostgresPromptRepository`. The DI extension
+registers both the concrete type and `IPromptRepository` (as an alias for the same
+singleton), so resolve whichever fits your use case:
+
+```csharp
+// Read-only consumers (factories, query handlers) inject IPromptRepository.
+var reader = services.GetRequiredService<IPromptRepository>();
+
+// Write consumers (admin tools, seed scripts) inject the concrete type.
+var writer = services.GetRequiredService<PostgresPromptRepository>();
+```
+
+The write surface is immutability-preserving:
 
 ```csharp
 // 1. Insert a new template — defaults to Draft, generates a UUIDv7 id.
-await repository.InsertAsync(template, createdBy: "alice@example.com");
+await writer.InsertAsync(template, createdBy: "alice@example.com");
 
 // 2. Iterate on the draft. Content is mutable only while the row is Draft.
-await repository.UpdateContentAsync(revisedTemplate);
+await writer.UpdateContentAsync(revisedTemplate);
 
 // 3. Promote it forward through the lifecycle.
-await repository.SetStatusAsync(key, version, PromptStatus.Published);
-await repository.SetStatusAsync(key, version, PromptStatus.Deprecated); // also sets deprecated_at = now()
+await writer.SetStatusAsync(key, version, PromptStatus.Published);
+await writer.SetStatusAsync(key, version, PromptStatus.Deprecated); // sets deprecated_at = now()
+await writer.SetStatusAsync(key, version, PromptStatus.Archived);   // sets archived_at = now()
 ```
 
 Rules:
@@ -270,12 +290,38 @@ Rules:
   or same-status transitions throw `PromptWriteConflictException`.
 - **Hard delete is not supported.** Archive via `SetStatusAsync(..., PromptStatus.Archived)` —
   preserves the audit trail.
+- **Concurrent writes are detected.** Both `UpdateContentAsync` and `SetStatusAsync` use optimistic
+  concurrency (the UPDATE filters on the status observed at check time). If another writer changes
+  the row between the check and the UPDATE, the method throws `PromptWriteConflictException` rather
+  than silently overwriting — callers retry after re-reading state.
+
+#### Advanced configuration
+
+`AddPostgresPromptRepository` forwards two optional callbacks to the underlying
+`AddDeepSigmaPostgres`, for cases that need provider-level customization:
+
+```csharp
+services.AddPostgresPromptRepository(
+    connectionString,
+    configureDataSource: builder =>
+    {
+        // e.g. register custom Npgsql type handlers, enum / composite mappings, password providers
+        builder.EnableDynamicJson();
+    },
+    onConnectionOpened: conn =>
+    {
+        // e.g. per-connection SET statements
+        using var cmd = conn.CreateCommand();
+        cmd.CommandText = "SET search_path = prompts, public";
+        cmd.ExecuteNonQuery();
+    });
+```
 
 Under the hood the repository runs on
 [`DeepSigma.DataAccess.Postgres`](https://www.nuget.org/packages/DeepSigma.DataAccess.Postgres),
 so `AddPostgresPromptRepository(connectionString)` also registers `RelationalDatabaseApi`,
-`IDbConnectionFactory`, and the schema / bulk-copy services from that package — handy if
-your app already uses them.
+`IDbConnectionFactory`, `MigrationRunner`, and the schema / bulk-copy services from that
+package — handy if your app already uses them.
 
 ---
 

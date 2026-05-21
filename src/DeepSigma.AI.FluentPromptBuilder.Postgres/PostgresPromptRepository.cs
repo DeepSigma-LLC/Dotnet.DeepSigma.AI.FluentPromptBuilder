@@ -184,7 +184,7 @@ public sealed class PostgresPromptRepository : IPromptRepository
 
         try
         {
-            await _db.UpdateAsync(sql, parameters, cancellationToken: cancellationToken).ConfigureAwait(false);
+            await _db.ExecuteAsync(sql, parameters, cancellationToken: cancellationToken).ConfigureAwait(false);
         }
         catch (PostgresException ex) when (ex.SqlState == "23505")
         {
@@ -199,8 +199,16 @@ public sealed class PostgresPromptRepository : IPromptRepository
     /// <c>template.Id.(Key, Version)</c>. Only permitted while the row is in
     /// <see cref="PromptStatus.Draft"/> — once published, content is immutable; bump the version.
     /// </summary>
+    /// <remarks>
+    /// The UPDATE itself filters on <c>status_id = Draft</c>, so a concurrent publish between the
+    /// status check and the UPDATE is detected (rows-affected = 0) and surfaced as a conflict
+    /// rather than silently no-oping.
+    /// </remarks>
     /// <exception cref="PromptNotFoundException">If no row exists at the template's key+version.</exception>
-    /// <exception cref="PromptWriteConflictException">If the row exists but is not in <see cref="PromptStatus.Draft"/>.</exception>
+    /// <exception cref="PromptWriteConflictException">
+    /// If the row exists but is not in <see cref="PromptStatus.Draft"/>, or if the row's status
+    /// changed between the status check and the UPDATE.
+    /// </exception>
     public async Task UpdateContentAsync(
         PromptTemplate template,
         CancellationToken cancellationToken = default)
@@ -240,17 +248,33 @@ public sealed class PostgresPromptRepository : IPromptRepository
             DraftStatusId = (short)PromptStatus.Draft,
         };
 
-        await _db.UpdateAsync(sql, parameters, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var affected = await _db.UpdateAsync(sql, parameters, cancellationToken: cancellationToken).ConfigureAwait(false);
+        if (affected == 0)
+        {
+            // Row was Draft at the check but is no longer — concurrent transition.
+            throw new PromptWriteConflictException(
+                $"Cannot update content for {key}@{version}: status changed from Draft concurrently. Retry after re-reading state.");
+        }
     }
 
     /// <summary>
     /// Transitions the row at <paramref name="key"/>+<paramref name="version"/> to
     /// <paramref name="newStatus"/>. Only forward transitions are allowed
-    /// (Draft → Published → Deprecated → Archived). When transitioning to Deprecated,
-    /// <c>deprecated_at</c> is set to <c>now()</c>.
+    /// (Draft → Published → Deprecated → Archived). Sets <c>deprecated_at = now()</c> when
+    /// transitioning to Deprecated, and <c>archived_at = now()</c> when transitioning to Archived.
     /// </summary>
+    /// <remarks>
+    /// Uses optimistic concurrency: the UPDATE filters on the status observed during the check,
+    /// so a concurrent writer cannot defeat the forward-only validation by mutating the row
+    /// between the SELECT and the UPDATE. On a mismatch (rows-affected = 0) the method
+    /// re-reads the current state to disambiguate "row vanished" from "concurrent transition"
+    /// for the error message.
+    /// </remarks>
     /// <exception cref="PromptNotFoundException">If no row exists at <paramref name="key"/>+<paramref name="version"/>.</exception>
-    /// <exception cref="PromptWriteConflictException">If <paramref name="newStatus"/> would be a non-forward transition.</exception>
+    /// <exception cref="PromptWriteConflictException">
+    /// If <paramref name="newStatus"/> would be a non-forward transition, or if another writer
+    /// changed the row's status between the check and the UPDATE.
+    /// </exception>
     public async Task SetStatusAsync(
         PromptKey key,
         PromptVersion version,
@@ -271,18 +295,22 @@ public sealed class PostgresPromptRepository : IPromptRepository
         var sql = $"""
             UPDATE {_tableName}
             SET    status_id     = @NewStatusId,
-                   deprecated_at = CASE WHEN @NewStatusId = @DeprecatedStatusId THEN now() ELSE deprecated_at END
+                   deprecated_at = CASE WHEN @NewStatusId = @DeprecatedStatusId THEN now() ELSE deprecated_at END,
+                   archived_at   = CASE WHEN @NewStatusId = @ArchivedStatusId   THEN now() ELSE archived_at   END
             WHERE  namespace      = @Namespace
               AND  name           = @Name
               AND  version_major  = @Major
               AND  version_minor  = @Minor
               AND  version_patch  = @Patch
+              AND  status_id      = @ExpectedCurrentStatusId
             """;
 
         var parameters = new
         {
             NewStatusId = (short)newStatus,
             DeprecatedStatusId = (short)PromptStatus.Deprecated,
+            ArchivedStatusId = (short)PromptStatus.Archived,
+            ExpectedCurrentStatusId = (short)currentStatus,
             Namespace = key.Namespace,
             Name = key.Name,
             Major = version.Major,
@@ -290,10 +318,29 @@ public sealed class PostgresPromptRepository : IPromptRepository
             Patch = version.Patch,
         };
 
-        await _db.UpdateAsync(sql, parameters, cancellationToken: cancellationToken).ConfigureAwait(false);
+        var affected = await _db.UpdateAsync(sql, parameters, cancellationToken: cancellationToken).ConfigureAwait(false);
+        if (affected == 0)
+        {
+            var nowStatus = await GetStatusOrNullAsync(key, version, cancellationToken).ConfigureAwait(false);
+            if (nowStatus is null)
+            {
+                throw new PromptNotFoundException(key, version);
+            }
+            throw new PromptWriteConflictException(
+                $"Status for {key}@{version} changed concurrently from {currentStatus} to {nowStatus}; retry.");
+        }
     }
 
     private async Task<PromptStatus> GetStatusOrThrowAsync(
+        PromptKey key,
+        PromptVersion version,
+        CancellationToken cancellationToken)
+    {
+        var status = await GetStatusOrNullAsync(key, version, cancellationToken).ConfigureAwait(false);
+        return status ?? throw new PromptNotFoundException(key, version);
+    }
+
+    private async Task<PromptStatus?> GetStatusOrNullAsync(
         PromptKey key,
         PromptVersion version,
         CancellationToken cancellationToken)
@@ -323,10 +370,19 @@ public sealed class PostgresPromptRepository : IPromptRepository
 
         if (statusId is null)
         {
-            throw new PromptNotFoundException(key, version);
+            return null;
         }
 
-        return (PromptStatus)statusId.Value;
+        var status = (PromptStatus)statusId.Value;
+        if (!Enum.IsDefined(status))
+        {
+            // Future schema may add new status_id values; an older binary that doesn't recognize
+            // them must fail loudly rather than silently mishandling the row.
+            throw new PromptSerializationException(
+                $"Row for {key}@{version} has unknown status_id={statusId.Value}; " +
+                "client binary may be older than the schema.");
+        }
+        return status;
     }
 
     private async Task<PromptTemplate?> LoadSingleTemplateAsync(

@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <RootNamespace>DeepSigma.AI.FluentPromptBuilder</RootNamespace>
@@ -7,9 +7,8 @@
     <Description>A lightweight, extensible fluent prompt-building library for .NET.</Description>
     <PackageTags>ai;prompt;builder;openai;anthropic;llm</PackageTags>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <IncludeSymbols>true</IncludeSymbols>
-    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
+
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <Title>DeepSigma.AI.FluentPromptBuilder</Title>
     <Authors>DeepSigma LLC</Authors>

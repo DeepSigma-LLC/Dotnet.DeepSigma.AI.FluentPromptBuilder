@@ -1,9 +1,11 @@
+using DeepSigma.DataAccess.RelationalDatabase;
+
 namespace DeepSigma.AI.FluentPromptBuilder.Postgres;
 
 /// <summary>
 /// SQL fragments used by the Postgres adapter. Exposed so callers can hand the schema DDL to
 /// their migration tool of choice (Flyway, dbup, EF migrations, manual SQL, etc.) instead of
-/// relying on <c>EnsureSchemaCreatedAsync</c>.
+/// relying on <see cref="PostgresPromptSchemaInitializer"/>.
 /// </summary>
 public static class PostgresSchema
 {
@@ -63,6 +65,33 @@ public static class PostgresSchema
                 ON {tableName} (namespace, name, status_id,
                                 version_major DESC, version_minor DESC, version_patch DESC);
             """;
+    }
+
+    /// <summary>
+    /// Returns the ordered <see cref="Migration"/> list for the prompt store, suitable for handing
+    /// directly to <see cref="MigrationRunner.ApplyAsync"/>. Migration ids include the table name
+    /// so multiple prompt stores in the same database track migrations independently.
+    /// </summary>
+    /// <param name="tableName">Optional override for the main-table name.</param>
+    /// <param name="statusTableName">Optional override for the status lookup-table name.</param>
+    public static IReadOnlyList<Migration> GetMigrations(
+        string tableName = DefaultTableName,
+        string statusTableName = DefaultStatusTableName)
+    {
+        ValidateIdentifier(tableName);
+        ValidateIdentifier(statusTableName);
+
+        return
+        [
+            new Migration(
+                Id: $"0001_init_{tableName}",
+                Sql: CreateSchemaSql(tableName, statusTableName),
+                Description: "Initial prompt-templates schema and status seed."),
+            new Migration(
+                Id: $"0002_add_archived_at_{tableName}",
+                Sql: $"ALTER TABLE {tableName} ADD COLUMN IF NOT EXISTS archived_at timestamptz NULL;",
+                Description: "Audit timestamp for Archived transitions."),
+        ];
     }
 
     internal static void ValidateIdentifier(string identifier)

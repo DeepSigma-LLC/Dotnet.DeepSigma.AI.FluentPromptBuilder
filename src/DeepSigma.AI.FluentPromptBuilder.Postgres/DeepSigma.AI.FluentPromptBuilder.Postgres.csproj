@@ -7,9 +7,7 @@
     <Description>Postgres-backed IPromptRepository for DeepSigma.AI.FluentPromptBuilder, using Dapper and Npgsql.</Description>
     <PackageTags>ai;prompt;postgres;dapper;npgsql</PackageTags>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
-    <IncludeSymbols>true</IncludeSymbols>
-    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
-    <Version>1.1.0</Version>
+    <Version>1.2.0</Version>
     <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
     <Title>DeepSigma.AI.FluentPromptBuilder.Postrgres</Title>
     <Authors>DeepSigma LLC</Authors>
@@ -25,7 +23,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="DeepSigma.DataAccess.Postgres" Version="1.1.0" />
+    <PackageReference Include="DeepSigma.DataAccess.Postgres" Version="1.2.0" />
     <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.7" />
   </ItemGroup>
 

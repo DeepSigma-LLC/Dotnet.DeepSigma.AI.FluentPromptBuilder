@@ -1,7 +1,5 @@
 using DeepSigma.AI.FluentPromptBuilder.Domain;
 using DeepSigma.AI.FluentPromptBuilder.Postgres;
-using DeepSigma.DataAccess.Postgres;
-using DeepSigma.DataAccess.RelationalDatabase;
 using Xunit;
 
 namespace DeepSigma.AI.FluentPromptBuilder.Postgres.Tests.Integration;
@@ -15,8 +13,7 @@ public class PostgresPromptRepositoryIntegrationTests : IAsyncLifetime
     public PostgresPromptRepositoryIntegrationTests(PostgresContainerFixture fixture)
     {
         _fixture = fixture;
-        var db = new RelationalDatabaseApi(new PostgresConnectionFactory(fixture.ConnectionString));
-        _repo = new PostgresPromptRepository(db);
+        _repo = new PostgresPromptRepository(fixture.Db);
     }
 
     public ValueTask InitializeAsync() => new(_fixture.ResetAsync());

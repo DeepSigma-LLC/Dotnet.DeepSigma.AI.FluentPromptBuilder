@@ -1,9 +1,6 @@
 using DeepSigma.AI.FluentPromptBuilder.Domain;
 using DeepSigma.AI.FluentPromptBuilder.Exceptions;
 using DeepSigma.AI.FluentPromptBuilder.Postgres;
-using DeepSigma.DataAccess.Postgres;
-using DeepSigma.DataAccess.RelationalDatabase;
-using Npgsql;
 using Xunit;
 
 namespace DeepSigma.AI.FluentPromptBuilder.Postgres.Tests.Integration;
@@ -17,8 +14,7 @@ public class PostgresPromptRepositoryWriteTests : IAsyncLifetime
     public PostgresPromptRepositoryWriteTests(PostgresContainerFixture fixture)
     {
         _fixture = fixture;
-        var db = new RelationalDatabaseApi(new PostgresConnectionFactory(fixture.ConnectionString));
-        _repo = new PostgresPromptRepository(db);
+        _repo = new PostgresPromptRepository(fixture.Db);
     }
 
     public ValueTask InitializeAsync() => new(_fixture.ResetAsync());
@@ -163,15 +159,37 @@ public class PostgresPromptRepositoryWriteTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task SetStatusAsync_PublishedToArchived_DoesNotSetDeprecatedAt()
+    public async Task SetStatusAsync_PublishedToArchived_SetsArchivedAtButNotDeprecatedAt()
     {
         var key = new PromptKey("Write", "DirectArchive");
         var version = new PromptVersion(1, 0, 0);
         await _repo.InsertAsync(BuildTemplate(key, version, "x"), PromptStatus.Published);
 
+        var before = DateTime.UtcNow;
         await _repo.SetStatusAsync(key, version, PromptStatus.Archived);
+        var after = DateTime.UtcNow;
 
         Assert.Null(await ReadDeprecatedAtAsync(key, version));
+        var archivedAt = await ReadArchivedAtAsync(key, version);
+        Assert.NotNull(archivedAt);
+        Assert.InRange(archivedAt!.Value, before.AddSeconds(-1), after.AddSeconds(1));
+    }
+
+    [Fact]
+    public async Task SetStatusAsync_DeprecatedToArchived_PreservesDeprecatedAtAndSetsArchivedAt()
+    {
+        var key = new PromptKey("Write", "DeprecateThenArchive");
+        var version = new PromptVersion(1, 0, 0);
+        await _repo.InsertAsync(BuildTemplate(key, version, "x"), PromptStatus.Published);
+        await _repo.SetStatusAsync(key, version, PromptStatus.Deprecated);
+        var deprecatedAt = await ReadDeprecatedAtAsync(key, version);
+
+        await _repo.SetStatusAsync(key, version, PromptStatus.Archived);
+
+        // deprecated_at must be preserved through the Archive transition.
+        var stillDeprecatedAt = await ReadDeprecatedAtAsync(key, version);
+        Assert.Equal(deprecatedAt, stillDeprecatedAt);
+        Assert.NotNull(await ReadArchivedAtAsync(key, version));
     }
 
     [Fact]
@@ -208,39 +226,37 @@ public class PostgresPromptRepositoryWriteTests : IAsyncLifetime
 
     // ----- Helpers -------------------------------------------------------------------------
 
-    private async Task<string?> ReadCreatedByAsync(PromptKey key, PromptVersion version)
-    {
-        await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(
-            "SELECT created_by FROM prompt_templates " +
-            "WHERE namespace = @ns AND name = @n " +
-            "AND version_major = @maj AND version_minor = @min AND version_patch = @pat",
-            conn);
-        cmd.Parameters.AddWithValue("ns", key.Namespace);
-        cmd.Parameters.AddWithValue("n", key.Name);
-        cmd.Parameters.AddWithValue("maj", version.Major);
-        cmd.Parameters.AddWithValue("min", version.Minor);
-        cmd.Parameters.AddWithValue("pat", version.Patch);
-        var result = await cmd.ExecuteScalarAsync();
-        return result is DBNull or null ? null : (string?)result;
-    }
+    private Task<string?> ReadCreatedByAsync(PromptKey key, PromptVersion version) =>
+        ReadScalarColumnAsync<string?>("created_by", key, version);
 
-    private async Task<DateTime?> ReadDeprecatedAtAsync(PromptKey key, PromptVersion version)
+    private Task<DateTime?> ReadDeprecatedAtAsync(PromptKey key, PromptVersion version) =>
+        ReadScalarColumnAsync<DateTime?>("deprecated_at", key, version);
+
+    private Task<DateTime?> ReadArchivedAtAsync(PromptKey key, PromptVersion version) =>
+        ReadScalarColumnAsync<DateTime?>("archived_at", key, version);
+
+    private Task<T?> ReadScalarColumnAsync<T>(string column, PromptKey key, PromptVersion version)
     {
-        await using var conn = new NpgsqlConnection(_fixture.ConnectionString);
-        await conn.OpenAsync();
-        await using var cmd = new NpgsqlCommand(
-            "SELECT deprecated_at FROM prompt_templates " +
-            "WHERE namespace = @ns AND name = @n " +
-            "AND version_major = @maj AND version_minor = @min AND version_patch = @pat",
-            conn);
-        cmd.Parameters.AddWithValue("ns", key.Namespace);
-        cmd.Parameters.AddWithValue("n", key.Name);
-        cmd.Parameters.AddWithValue("maj", version.Major);
-        cmd.Parameters.AddWithValue("min", version.Minor);
-        cmd.Parameters.AddWithValue("pat", version.Patch);
-        var result = await cmd.ExecuteScalarAsync();
-        return result is DBNull or null ? null : (DateTime?)result;
+        // Column name is hard-coded by the caller, not user input — safe to interpolate.
+        var sql = $"""
+            SELECT {column}
+            FROM   prompt_templates
+            WHERE  namespace      = @Namespace
+              AND  name           = @Name
+              AND  version_major  = @Major
+              AND  version_minor  = @Minor
+              AND  version_patch  = @Patch
+            """;
+
+        return _fixture.Db.QuerySingleOrDefaultAsync<object, T?>(
+            sql,
+            new
+            {
+                Namespace = key.Namespace,
+                Name = key.Name,
+                Major = version.Major,
+                Minor = version.Minor,
+                Patch = version.Patch,
+            });
     }
 }
