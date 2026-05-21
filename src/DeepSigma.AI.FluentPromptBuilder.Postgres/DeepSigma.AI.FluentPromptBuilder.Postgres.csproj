@@ -10,6 +10,14 @@
     <IncludeSymbols>true</IncludeSymbols>
     <SymbolPackageFormat>snupkg</SymbolPackageFormat>
     <Version>1.1.0</Version>
+    <GeneratePackageOnBuild>True</GeneratePackageOnBuild>
+    <Title>DeepSigma.AI.FluentPromptBuilder.Postrgres</Title>
+    <Authors>DeepSigma LLC</Authors>
+    <Company>$(Authors)</Company>
+    <PackageProjectUrl>https://github.com/DeepSigma-LLC/Dotnet.DeepSigma.AI.FluentPromptBuilder</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/DeepSigma-LLC/Dotnet.DeepSigma.AI.FluentPromptBuilder</RepositoryUrl>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <PackageIcon>DeepSigma.png</PackageIcon>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,6 +31,17 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="DeepSigma.AI.FluentPromptBuilder.Postgres.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+    <None Include="..\DeepSigma.AI.FluentPromptBuilder\DeepSigma.png">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
   </ItemGroup>
 
 </Project>
