@@ -567,7 +567,9 @@ Postgres is shipped as a companion package — see [Section 5](#5-postgres-backe
 Other backends (SQL Server, MySQL, Redis, DynamoDB) can be added in separate packages by
 implementing `IPromptRepository`; nothing in the core library needs to change.
 
-Postgres write API (`Upsert`, `Delete`) — planned, not in v1.
+Postgres write API: `InsertAsync` + `UpdateContentAsync` (drafts only) + forward-only
+`SetStatusAsync` (Draft → Published → Deprecated → Archived). Hard delete intentionally
+not supported — archive via `SetStatusAsync(..., Archived)`.
 
 ### Provider adapters (planned)
 
